@@ -41,58 +41,151 @@ using namespace std;
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block Stmt
+%type <ast_val> FuncDef FuncType Block Stmt Exp UnaryExp PrimaryExp MulExp AddExp RelExp EqExp LogicalAndExp LogicalOrExp
 %type <int_val> Number
 
 %%
 
-CompUnit
-  : FuncDef {
-      auto comp_unit = make_unique<CompUnitAST>();
-      comp_unit->func_def = unique_ptr<BaseAST>($1);
-      ast = move(comp_unit);
-  }
-  ;
+CompUnit:
+  FuncDef {
+    auto comp_unit = make_unique<CompUnitAST>();
+    comp_unit->func_def = unique_ptr<BaseAST>($1);
+    ast = move(comp_unit);
+  };
 
-FuncDef
-  : FuncType IDENT '(' ')' Block {
+FuncDef: 
+  FuncType IDENT '(' ')' Block {
     auto ast = new FuncDefAST();
     ast->func_type = unique_ptr<BaseAST>($1);
     ast->ident = *unique_ptr<string>($2);
     ast->block = unique_ptr<BaseAST>($5);
     $$ = ast;
-  }
-  ;
+  };
 
-FuncType
-  : INT {
+FuncType:
+  INT {
     auto ast = new FuncTypeAST();
-    ast->type = "int";
+    ast->type = "i32";
     $$ = ast;
-  }
-  ;
+  };
 
-Block
-  : '{' Stmt '}' {
+Block:
+ '{' Stmt '}' {
     auto ast = new BlockAST();
     ast->stmt = unique_ptr<BaseAST>($2);
     $$ = ast;
-  }
-  ;
+  };
 
-Stmt
-  : RETURN Number ';' {
+Stmt: 
+  RETURN Exp ';' {
     auto ast = new StmtAST();
-    ast->number = $2;
+    ast->exp = unique_ptr<BaseAST>($2);
+    $$ = ast;
+  };
+
+Exp:
+  AddExp {
+    auto ast = new ExpAST();
+    ast->logical_or_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  };
+
+AddExp:
+  MulExp {
+    auto ast = new AddExpAST();
+    ast->which = AddExpAST::AddExpEnum::into_mul;
+    ast->mul_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } | 
+  AddExp '+' MulExp {
+    auto ast = new AddExpAST();
+    ast->which = AddExpAST::AddExpEnum::add;
+    ast->add_exp = unique_ptr<BaseAST>($1);
+    ast->mul_exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  } |
+  AddExp '-' MulExp {
+    auto ast = new AddExpAST();
+    ast->which = AddExpAST::AddExpEnum::minus;
+    ast->add_exp = unique_ptr<BaseAST>($1);
+    ast->mul_exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  };
+
+
+MulExp:
+  UnaryExp {
+    auto ast = new MulExpAST();
+    ast->which = MulExpAST::MulExpEnum::into_unary;
+    ast->unary_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } | 
+  MulExp '*' UnaryExp {
+    auto ast = new MulExpAST();
+    ast->which = MulExpAST::MulExpEnum::mul;
+    ast->mul_exp = unique_ptr<BaseAST>($1);
+    ast->unary_exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  } |
+  MulExp '/' UnaryExp {
+    auto ast = new MulExpAST();
+    ast->which = MulExpAST::MulExpEnum::div;
+    ast->mul_exp = unique_ptr<BaseAST>($1);
+    ast->unary_exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  } |
+  MulExp '%' UnaryExp {
+    auto ast = new MulExpAST();
+    ast->which = MulExpAST::MulExpEnum::rem;
+    ast->mul_exp = unique_ptr<BaseAST>($1);
+    ast->unary_exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  };
+
+UnaryExp:
+  PrimaryExp {
+    auto ast = new UnaryExpAST();
+    ast->which = UnaryExpAST::UnaryExpEnum::into_primary;
+    ast->primary_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } | 
+  '+' UnaryExp {
+    auto ast = new UnaryExpAST();
+    ast->which = UnaryExpAST::UnaryExpEnum::pos;
+    ast->unary_exp = unique_ptr<BaseAST>($2);
+    $$ = ast;
+  } |
+  '-' UnaryExp {
+    auto ast = new UnaryExpAST();
+    ast->which = UnaryExpAST::UnaryExpEnum::neg;
+    ast->unary_exp = unique_ptr<BaseAST>($2);
+    $$ = ast;
+  } |
+  '!' UnaryExp {
+    auto ast = new UnaryExpAST();
+    ast->which = UnaryExpAST::UnaryExpEnum::logical_neg;
+    ast->unary_exp = unique_ptr<BaseAST>($2);
+    $$ = ast;
+  };
+
+PrimaryExp:
+  Number {
+    auto ast = new PrimaryExpAST();
+    ast->which = PrimaryExpAST::PrimaryExpEnum::into_number;
+    ast->number = $1;
+    $$ = ast;
+  } | 
+  '(' Exp ')' {
+    auto ast = new PrimaryExpAST();
+    ast->which = PrimaryExpAST::PrimaryExpEnum::another_exp;
+    ast->exp = unique_ptr<BaseAST>($2);
     $$ = ast;
   }
-  ;
 
-Number
-  : INT_CONST {
+Number:
+  INT_CONST {
     $$ = $1;
-  }
-  ;
+  };
 
 %%
 
