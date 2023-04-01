@@ -85,7 +85,7 @@ public:
 class RelExpAST : public BaseAST {
 public:
     enum class RelExpEnum {into_add, lt, gt, le, ge} which;
-    std::unique_ptr<BaseAST> eq_exp, rel_exp;
+    std::unique_ptr<BaseAST> rel_exp, add_exp;
     Result DumpKoopa(std::ofstream &ofs) const override;
 };
 

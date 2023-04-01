@@ -98,7 +98,7 @@ int main(int argc, const char *argv[]) {
 
         ofstream fout(output);
         ast->DumpKoopa(fout);
-        fout.close();
+        fout.close();        
 
     } else if (strcmp(mode, "-riscv") == 0) {
 /*

@@ -4,6 +4,10 @@
 
 static int RegCount = 0;
 
+#define OP(d, oprand, s1, s2) \
+    ofs << d << " = " << oprand << " " << s1 << ", " << s2 << "\n";
+
+
 Result CompUnitAST::DumpKoopa(std::ofstream &ofs) const {
     this->func_def->DumpKoopa(ofs);
     return Result();
@@ -35,7 +39,69 @@ Result StmtAST::DumpKoopa(std::ofstream &ofs) const {
 }
 
 Result ExpAST::DumpKoopa(std::ofstream &ofs) const {
-    return this->add_exp->DumpKoopa(ofs);
+    return this->logical_or_exp->DumpKoopa(ofs);
+}
+
+Result LogicalOrExpAST::DumpKoopa(std::ofstream &ofs) const {
+    if (this->which == LogicalOrExpAST::LogicalOrExpEnum::into_logical_and) {
+        return this->logical_and_exp->DumpKoopa(ofs);
+    }
+    Result s1 = this->logical_or_exp->DumpKoopa(ofs);
+    Result s2 = this->logical_and_exp->DumpKoopa(ofs);
+    Result d1 = Result(Result::ResultEnum::reg, RegCount++);
+    Result d2 = Result(Result::ResultEnum::reg, RegCount++);
+    OP(d1, "or", s1, s2);
+    OP(d2, "ne", d1, "0");
+    return d2;
+}
+
+Result LogicalAndExpAST::DumpKoopa(std::ofstream &ofs) const {
+    if (this->which == LogicalAndExpAST::LogicalAndExpEnum::into_eq) {
+        return this->eq_exp->DumpKoopa(ofs);
+    }
+    Result s1 = this->logical_and_exp->DumpKoopa(ofs);
+    Result s2 = this->eq_exp->DumpKoopa(ofs);
+    Result d1 = Result(Result::ResultEnum::reg, RegCount++);
+    Result d2 = Result(Result::ResultEnum::reg, RegCount++);
+    Result d3 = Result(Result::ResultEnum::reg, RegCount++);
+    OP(d1, "ne", s1, "0");
+    OP(d2, "ne", s2, "0");
+    OP(d3, "and", d1, d2);
+    return d3;
+}
+
+Result EqExpAST::DumpKoopa(std::ofstream &ofs) const {
+    if (this->which == EqExpAST::EqExpEnum::into_rel) {
+        return this->rel_exp->DumpKoopa(ofs);
+    }
+    Result s1 = this->eq_exp->DumpKoopa(ofs);
+    Result s2 = this->rel_exp->DumpKoopa(ofs);
+    Result d = Result(Result::ResultEnum::reg, RegCount++);
+    if (this->which == EqExpAST::EqExpEnum::eq) {
+        OP(d, "eq", s1, s2);
+    } else {
+        OP(d, "ne", s1, s2);
+    }
+    return d;
+}
+
+Result RelExpAST::DumpKoopa(std::ofstream &ofs) const {
+    if (this->which == RelExpAST::RelExpEnum::into_add) {
+        return this->add_exp->DumpKoopa(ofs);
+    }
+    Result s1 = this->rel_exp->DumpKoopa(ofs);
+    Result s2 = this->add_exp->DumpKoopa(ofs);
+    Result d = Result(Result::ResultEnum::reg, RegCount++);
+    if (this->which == RelExpAST::RelExpEnum::lt) {
+        OP(d, "lt", s1, s2);
+    } else if (this->which == RelExpAST::RelExpEnum::gt) {
+        OP(d, "gt", s1, s2);
+    } else if (this->which == RelExpAST::RelExpEnum::le) {
+        OP(d, "le", s1, s2);
+    } else {
+        OP(d, "ge", s1, s2);
+    }
+    return d;
 }
 
 Result AddExpAST::DumpKoopa(std::ofstream &ofs) const {
@@ -46,9 +112,9 @@ Result AddExpAST::DumpKoopa(std::ofstream &ofs) const {
     Result s2 = this->mul_exp->DumpKoopa(ofs);
     Result d = Result(Result::ResultEnum::reg, RegCount++);
     if (this->which == AddExpAST::AddExpEnum::add) {
-        ofs << d << " = add " << s1 << ", " << s2 << "\n";
+        OP(d, "add", s1, s2);
     } else {
-        ofs << d << " = sub " << s1 << ", " << s2 << "\n";
+        OP(d, "sub", s1, s2);
     }
     return d;
 }
@@ -61,11 +127,11 @@ Result MulExpAST::DumpKoopa(std::ofstream &ofs) const {
     Result s2 = this->unary_exp->DumpKoopa(ofs);
     Result d = Result(Result::ResultEnum::reg, RegCount++);
     if (this->which == MulExpAST::MulExpEnum::mul) {
-        ofs << d << " = mul " << s1 << ", " << s2 << "\n";
+        OP(d, "mul", s1, s2);
     } else if (this->which == MulExpAST::MulExpEnum::div) {
-        ofs << d << " = div " << s1 << ", " << s2 << "\n";
+        OP(d, "div", s1, s2);
     } else {
-        ofs << d << " = rem " << s1 << ", " << s2 << "\n";
+        OP(d, "mod", s1, s2);
     }
     return d;
 }
@@ -81,9 +147,9 @@ Result UnaryExpAST::DumpKoopa(std::ofstream &ofs) const {
     Result s = this->unary_exp->DumpKoopa(ofs);
     Result d = Result(Result::ResultEnum::reg, RegCount++);
     if (this->which == UnaryExpAST::UnaryExpEnum::neg) {
-        ofs << d << " = sub 0, " << s << "\n";
+        OP(d, "sub", 0, s);
     } else { 
-        ofs << d << " = eq 0, " << s << "\n";
+        OP(d, "eq", 0, s);
     }
     return d;
 }

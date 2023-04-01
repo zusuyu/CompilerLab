@@ -36,7 +36,8 @@ using namespace std;
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN
+
+%token INT RETURN CONST
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 
@@ -84,9 +85,97 @@ Stmt:
   };
 
 Exp:
-  AddExp {
+  LogicalOrExp {
     auto ast = new ExpAST();
     ast->logical_or_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  };
+
+LogicalOrExp:
+  LogicalAndExp {
+    auto ast = new LogicalOrExpAST();
+    ast->which = LogicalOrExpAST::LogicalOrExpEnum::into_logical_and;
+    ast->logical_and_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } | 
+  LogicalOrExp '|' '|' LogicalAndExp {
+    auto ast = new LogicalOrExpAST();
+    ast->which = LogicalOrExpAST::LogicalOrExpEnum::logical_or;
+    ast->logical_or_exp = unique_ptr<BaseAST>($1);
+    ast->logical_and_exp = unique_ptr<BaseAST>($4);
+    $$ = ast;
+  };
+
+LogicalAndExp:
+  EqExp {
+    auto ast = new LogicalAndExpAST();
+    ast->which = LogicalAndExpAST::LogicalAndExpEnum::into_eq;
+    ast->eq_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } | 
+  LogicalAndExp '&' '&' EqExp {
+    auto ast = new LogicalAndExpAST();
+    ast->which = LogicalAndExpAST::LogicalAndExpEnum::logical_and;
+    ast->logical_and_exp = unique_ptr<BaseAST>($1);
+    ast->eq_exp = unique_ptr<BaseAST>($4);
+    $$ = ast;
+  };
+
+EqExp:
+  RelExp {
+    auto ast = new EqExpAST();
+    ast->which = EqExpAST::EqExpEnum::into_rel;
+    ast->rel_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } | 
+  EqExp '=' '=' RelExp {
+    auto ast = new EqExpAST();
+    ast->which = EqExpAST::EqExpEnum::eq;
+    ast->eq_exp = unique_ptr<BaseAST>($1);
+    ast->rel_exp = unique_ptr<BaseAST>($4);
+    $$ = ast;
+  } |
+  EqExp '!' '=' RelExp {
+    auto ast = new EqExpAST();
+    ast->which = EqExpAST::EqExpEnum::ne;
+    ast->eq_exp = unique_ptr<BaseAST>($1);
+    ast->rel_exp = unique_ptr<BaseAST>($4);
+    $$ = ast;
+  };
+
+RelExp:
+  AddExp {
+    auto ast = new RelExpAST();
+    ast->which = RelExpAST::RelExpEnum::into_add;
+    ast->add_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } | 
+  RelExp '<' AddExp {
+    auto ast = new RelExpAST();
+    ast->which = RelExpAST::RelExpEnum::lt;
+    ast->rel_exp = unique_ptr<BaseAST>($1);
+    ast->add_exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  } |
+  RelExp '>' AddExp {
+    auto ast = new RelExpAST();
+    ast->which = RelExpAST::RelExpEnum::gt;
+    ast->rel_exp = unique_ptr<BaseAST>($1);
+    ast->add_exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  } |
+  RelExp '<' '=' AddExp {
+    auto ast = new RelExpAST();
+    ast->which = RelExpAST::RelExpEnum::le;
+    ast->rel_exp = unique_ptr<BaseAST>($1);
+    ast->add_exp = unique_ptr<BaseAST>($4);
+    $$ = ast;
+  } |
+  RelExp '>' '=' AddExp {
+    auto ast = new RelExpAST();
+    ast->which = RelExpAST::RelExpEnum::ge;
+    ast->rel_exp = unique_ptr<BaseAST>($1);
+    ast->add_exp = unique_ptr<BaseAST>($4);
     $$ = ast;
   };
 
