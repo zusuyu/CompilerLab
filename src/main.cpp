@@ -79,6 +79,8 @@ void Visit(const koopa_raw_value_t &value) {
 extern FILE *yyin;
 extern int yyparse(unique_ptr<BaseAST> &ast);
 
+ofstream koopa_ofs;
+
 int main(int argc, const char *argv[]) {
     // 解析命令行参数. 测试脚本/评测平台要求你的编译器能接收如下参数:
     // compiler 模式 输入文件 -o 输出文件
@@ -96,9 +98,9 @@ int main(int argc, const char *argv[]) {
 
     if (strcmp(mode, "-koopa") == 0) {
 
-        ofstream fout(output);
-        ast->DumpKoopa(fout);
-        fout.close();        
+        koopa_ofs = ofstream(output);
+        ast->DumpKoopa();
+        koopa_ofs.close();
 
     } else if (strcmp(mode, "-riscv") == 0) {
 /*

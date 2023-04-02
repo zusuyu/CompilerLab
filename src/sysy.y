@@ -32,6 +32,7 @@ using namespace std;
   std::string *str_val;
   int int_val;
   BaseAST *ast_val;
+  std::vector<std::unique_ptr<BaseAST>> *vec_val;
 }
 
 // lexer 返回的所有 token 种类的声明
@@ -42,8 +43,11 @@ using namespace std;
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block Stmt Exp UnaryExp PrimaryExp MulExp AddExp RelExp EqExp LogicalAndExp LogicalOrExp
+%type <ast_val> FuncDef FuncType Block 
+                BlockItem ConstDecl BType ConstDef ConstInitVal ConstExp Stmt LVal
+                Exp UnaryExp PrimaryExp MulExp AddExp RelExp EqExp LogicalAndExp LogicalOrExp
 %type <int_val> Number
+%type <vec_val> MoreBlockItem MoreConstDef
 
 %%
 
@@ -71,16 +75,94 @@ FuncType:
   };
 
 Block:
- '{' Stmt '}' {
+ '{' MoreBlockItem '}' {
     auto ast = new BlockAST();
-    ast->stmt = unique_ptr<BaseAST>($2);
+    ast->block_item = std::move(*($2));
+    $$ = ast;
+  };
+
+MoreBlockItem:
+  MoreBlockItem BlockItem {
+    ($1)->push_back(unique_ptr<BaseAST>($2));
+    $$ = $1;
+  } | 
+  %empty {
+    $$ = new vector<unique_ptr<BaseAST>>();
+  };
+
+BlockItem:
+  ConstDecl {
+    $$ = $1;
+  } | 
+  Stmt {
+    $$ = $1;
+  };
+
+ConstDecl:
+  CONST BType ConstDef MoreConstDef ';' {
+    auto ast = new ConstDeclAST();
+    ($4)->insert(($4)->begin(), unique_ptr<BaseAST>($3));
+    ast->const_def = std::move(*($4));
+    $$ = ast;
+  };
+
+BType:
+  INT {
+    auto ast = new BTypeAST();
+    ast->type = "i32";
+    $$ = ast;
+  };
+
+MoreConstDef:
+  MoreConstDef ',' ConstDef {
+    ($1)->push_back(unique_ptr<BaseAST>($3));
+    $$ = $1;
+  } | 
+  %empty {
+    $$ = new vector<unique_ptr<BaseAST>>();
+  };
+
+ConstDef:
+  IDENT '=' ConstInitVal {
+    auto ast = new ConstDefAST();
+    ast->ident = *unique_ptr<string>($1);
+    ast->const_init_val = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  };
+
+ConstInitVal:
+  ConstExp {
+    auto ast = new ConstInitValAST();
+    ast->const_exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  };
+
+ConstExp:
+  Exp {
+    auto ast = new ConstExpAST();
+    ast->exp = unique_ptr<BaseAST>($1);
     $$ = ast;
   };
 
 Stmt: 
   RETURN Exp ';' {
     auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::ret;
     ast->exp = unique_ptr<BaseAST>($2);
+    $$ = ast;
+  } | 
+  LVal '=' Exp ';' {
+    auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::assign;
+    ast->lval = unique_ptr<BaseAST>($1);
+    ast->exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  };
+
+LVal:
+  IDENT {
+    auto ast = new LValAST();
+    ast->ident = *unique_ptr<string>($1);
     $$ = ast;
   };
 
@@ -264,6 +346,12 @@ PrimaryExp:
     ast->number = $1;
     $$ = ast;
   } | 
+  LVal {
+    auto ast = new PrimaryExpAST();
+    ast->which = PrimaryExpAST::PrimaryExpEnum::into_lval;
+    ast->lval = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } |
   '(' Exp ')' {
     auto ast = new PrimaryExpAST();
     ast->which = PrimaryExpAST::PrimaryExpEnum::another_exp;
@@ -280,6 +368,14 @@ Number:
 
 // 定义错误处理函数, 其中第二个参数是错误信息
 // parser 如果发生错误 (例如输入的程序出现了语法错误), 就会调用这个函数
-void yyerror(unique_ptr<BaseAST> &ast, const char *s) {
-  cerr << "error: " << s << endl;
+void yyerror(std::unique_ptr<BaseAST> &ast, const char *s) {
+  
+    extern int yylineno;    // defined and maintained in lex
+    extern char *yytext;    // defined and maintained in lex
+    int len = strlen(yytext);
+    char buf[512] = {0};
+    for (int i = 0; i < len; ++i) {
+        sprintf(buf, "%s%d ", buf, yytext[i]);
+    }
+    fprintf(stderr, "ERROR: %s at symbol '%s' on line %d\n", s, buf, yylineno);
 }
