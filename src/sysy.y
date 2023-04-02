@@ -44,10 +44,13 @@ using namespace std;
 
 // 非终结符的类型定义
 %type <ast_val> FuncDef FuncType Block 
-                BlockItem ConstDecl BType ConstDef ConstInitVal ConstExp Stmt LVal
+                BlockItem BType 
+                ConstDecl ConstDef ConstInitVal ConstExp 
+                VarDecl VarDef InitVal
+                Stmt LVal
                 Exp UnaryExp PrimaryExp MulExp AddExp RelExp EqExp LogicalAndExp LogicalOrExp
 %type <int_val> Number
-%type <vec_val> MoreBlockItem MoreConstDef
+%type <vec_val> MoreBlockItem MoreConstDef MoreVarDef
 
 %%
 
@@ -94,6 +97,9 @@ BlockItem:
   ConstDecl {
     $$ = $1;
   } | 
+  VarDecl {
+    $$ = $1;
+  } |
   Stmt {
     $$ = $1;
   };
@@ -103,6 +109,14 @@ ConstDecl:
     auto ast = new ConstDeclAST();
     ($4)->insert(($4)->begin(), unique_ptr<BaseAST>($3));
     ast->const_def = std::move(*($4));
+    $$ = ast;
+  };
+
+VarDecl:
+  BType VarDef MoreVarDef ';' {
+    auto ast = new VarDeclAST();
+    ($3)->insert(($3)->begin(), unique_ptr<BaseAST>($2));
+    ast->var_def = std::move(*($3));
     $$ = ast;
   };
 
@@ -130,6 +144,29 @@ ConstDef:
     $$ = ast;
   };
 
+MoreVarDef:
+  MoreVarDef ',' VarDef {
+    ($1)->push_back(unique_ptr<BaseAST>($3));
+    $$ = $1;
+  } | 
+  %empty {
+    $$ = new vector<unique_ptr<BaseAST>>();
+  };
+
+VarDef:
+  IDENT '=' InitVal {
+    auto ast = new VarDefAST();
+    ast->ident = *unique_ptr<string>($1);
+    ast->init_val = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  } | 
+  IDENT {
+    auto ast = new VarDefAST();
+    ast->ident = *unique_ptr<string>($1);
+    ast->init_val = nullptr;
+    $$ = ast;
+  };
+
 ConstInitVal:
   ConstExp {
     auto ast = new ConstInitValAST();
@@ -140,6 +177,13 @@ ConstInitVal:
 ConstExp:
   Exp {
     auto ast = new ConstExpAST();
+    ast->exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  };
+
+InitVal:
+  Exp {
+    auto ast = new InitValAST();
     ast->exp = unique_ptr<BaseAST>($1);
     $$ = ast;
   };

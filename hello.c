@@ -3,10 +3,12 @@
 int main() {
   // 忽略我的存在
   /* ??? */
-  const int x = 1;
-  const int y = 2;
-  const int z = -5;
-  return x + y * z;
+
+  int x = 114514;
+  const int y = 1919810;
+  int z = x + y;
+  z = x * y;
+  return !z;
 
   /* **** */
 }

@@ -1,20 +1,12 @@
 #pragma once
 
-#include <bits/stdc++.h>
-
-class Result {
-public:
-    enum class ResultEnum {imm, reg} which;
-    int val;
-    Result() {}
-    Result(ResultEnum which_, int val_): which(which_), val(val_) {}
-    friend std::ostream & operator << (std::ostream &ofs, Result res);
-};
+#include "util.hpp"
 
 class BaseAST {
 public:
     virtual ~BaseAST() = default;
     virtual Result DumpKoopa() const = 0;
+    virtual void storeValue(Result res) const;
 };
 
 class CompUnitAST : public BaseAST {
@@ -50,6 +42,13 @@ public:
     Result DumpKoopa() const override;
 };
 
+class VarDeclAST : public BaseAST {
+public:
+    std::unique_ptr<BaseAST> btype;
+    std::vector<std::unique_ptr<BaseAST>> var_def;
+    Result DumpKoopa() const override;
+};
+
 class BTypeAST : public BaseAST {
 public:
     std::string type;
@@ -63,9 +62,22 @@ public:
     Result DumpKoopa() const override;
 };
 
+class VarDefAST : public BaseAST {
+public:
+    std::string ident;
+    std::unique_ptr<BaseAST> init_val;
+    Result DumpKoopa() const override;
+};
+
 class ConstInitValAST : public BaseAST {
 public:
     std::unique_ptr<BaseAST> const_exp;
+    Result DumpKoopa() const override;
+};
+
+class InitValAST : public BaseAST {
+public:
+    std::unique_ptr<BaseAST> exp;
     Result DumpKoopa() const override;
 };
 
@@ -86,6 +98,7 @@ class LValAST : public BaseAST {
 public:
     std::string ident;
     Result DumpKoopa() const override;
+    void storeValue(Result res) const override;
 };
 
 class ExpAST : public BaseAST {
@@ -140,7 +153,6 @@ class UnaryExpAST : public BaseAST {
 public:
     enum class UnaryExpEnum {into_primary, pos, neg, logical_neg} which;
     std::unique_ptr<BaseAST> unary_exp, primary_exp;
-    char unary_op;
     Result DumpKoopa() const override;
 };
 

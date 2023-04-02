@@ -1,86 +1,15 @@
 #include <bits/stdc++.h>
+
 #include "ast.hpp"
+#include "util.hpp"
 
-extern std::ofstream koopa_ofs;
+std::ofstream koopa_ofs;
+std::unordered_map<std::string, Value> Map;
+int RegCount = 0;
 
-static int RegCount = 0;
-class Value {
-public:
-    enum class ValueEnum {const_, var_} which;
-    int val;
-    Value() {}
-    Value(ValueEnum which_, int val_): which(which_), val(val_) {}
-};
-static std::unordered_map<std::string, Value> Map;
-
-#define Imm(v) (Result(Result::ResultEnum::imm, (v)))
-#define Reg(v) (Result(Result::ResultEnum::reg, (v)))
-
-#define Const(v) (Value(Value::ValueEnum::const_, (v)))
-#define Var(v) (Value(Value::ValueEnum::var_, (v)))
-
-#define OP(d, oprand, s1, s2) \
-    ofs << d << " = " << oprand << " " << s1 << ", " << s2 << "\n";
-
-std::ostream & operator << (std::ostream &ofs, Result res) {
-    if (res.which == Result::ResultEnum::reg)
-        ofs << '%';
-    ofs << res.val;
-    return ofs;
+void BaseAST::storeValue(Result res) const {
+    return;
 }
-
-Result calc(std::string oprand, Result s1, Result s2) {
-    if (s1.which == Result::ResultEnum::reg || s2.which == Result::ResultEnum::reg) {
-        Result d = Reg(RegCount++);
-        koopa_ofs << d << "= " << oprand << " " << s1 << ", " << s2 << "\n";
-        return d;
-    }
-    if (oprand == "ne") {
-        return Imm(s1.val != s2.val);
-    }
-    if (oprand == "eq") {
-        return Imm(s1.val == s2.val);
-    }
-    if (oprand == "gt") {
-        return Imm(s1.val > s2.val);
-    }
-    if (oprand == "lt") {
-        return Imm(s1.val < s2.val);
-    }
-    if (oprand == "ge") {
-        return Imm(s1.val >= s2.val);
-    }
-    if (oprand == "le") {
-        return Imm(s1.val <= s2.val);
-    }
-    if (oprand == "add") {
-        return Imm(s1.val + s2.val);
-    }
-    if (oprand == "sub") {
-        return Imm(s1.val - s2.val);
-    }
-    if (oprand == "mul") {
-        return Imm(s1.val * s2.val);
-    }
-    if (oprand == "div") {
-        return Imm(s1.val / s2.val);
-    }
-    if (oprand == "mod") {
-        return Imm(s1.val % s2.val);
-    }
-    if (oprand == "and") {
-        return Imm(s1.val & s2.val);
-    }
-    if (oprand == "or") {
-        return Imm(s1.val | s2.val);
-    }
-    if (oprand == "xor") {
-        return Imm(s1.val ^ s2.val);
-    }
-    return Result();    
-}
-
-
 
 Result CompUnitAST::DumpKoopa() const {
     this->func_def->DumpKoopa();
@@ -112,11 +41,18 @@ Result ConstDeclAST::DumpKoopa() const {
     for (auto &ptr: this->const_def) {
         ptr->DumpKoopa();
     }
+    return Result();        
+}
+
+Result VarDeclAST::DumpKoopa() const {
+    for (auto &ptr: this->var_def) {
+        ptr->DumpKoopa();
+    }
     return Result();
 }
 
 Result BTypeAST::DumpKoopa() const {
-    return Result();
+    return Result();        
 }
 
 Result ConstDefAST::DumpKoopa() const {
@@ -124,11 +60,26 @@ Result ConstDefAST::DumpKoopa() const {
     Result res = this->const_init_val->DumpKoopa();
     assert(res.which == Result::ResultEnum::imm); // must be const
     Map[this->ident] = Const(res.val);
+    return Result();        
+}
+
+Result VarDefAST::DumpKoopa() const {
+    assert(Map.find(this->ident) == Map.end()); // undefined identifier
+    koopa_ofs << "@" << this->ident << " = alloc i32\n";
+    if (this->init_val != nullptr) {
+        Result res = this->init_val->DumpKoopa();
+        koopa_ofs << "store " << res << ", @" << this->ident << "\n";
+    }
+    Map[this->ident] = Var;
     return Result();
 }
 
 Result ConstInitValAST::DumpKoopa() const {
     return this->const_exp->DumpKoopa();
+}
+
+Result InitValAST::DumpKoopa() const {
+    return this->exp->DumpKoopa();
 }
 
 Result ConstExpAST::DumpKoopa() const {
@@ -141,16 +92,24 @@ Result StmtAST::DumpKoopa() const {
         koopa_ofs << "ret " << res << "\n";
         return Result();
     } else {
+        this->lval->storeValue(this->exp->DumpKoopa());
         return Result();
     }
 }
 
-Result LValAST::DumpKoopa() const {
+Result LValAST::DumpKoopa() const  {
     auto it = Map.find(this->ident);
-    assert(it != Map.end());
-    if (it->second.which == Value::ValueEnum::const_)
+    assert(it != Map.end());  // defined identifier
+    if (it->second.which == Value::ValueEnum::const_) {
         return Imm(it->second.val);
-    return Result();
+    } else {
+        Result d = Reg(RegCount++);
+        koopa_ofs << d << " = load @" << this->ident << "\n";
+        return d;
+    }        
+}
+void LValAST::storeValue(Result res) const {
+    koopa_ofs << "store " << res << ", @" << this->ident << "\n";
 }
 
 Result ExpAST::DumpKoopa() const {
@@ -232,7 +191,6 @@ Result MulExpAST::DumpKoopa() const {
         return calc("mod", s1, s2);
     }
 }
-
 
 Result UnaryExpAST::DumpKoopa() const {
     if (this->which == UnaryExpAST::UnaryExpEnum::into_primary) {

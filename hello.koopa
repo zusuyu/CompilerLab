@@ -1,4 +1,15 @@
 fun @main(): i32 {
 %entry:
-ret -9
+@x = alloc i32
+store 114514, @x
+@z = alloc i32
+%0 = load @x
+%1= add %0, 1919810
+store %1, @z
+%2 = load @x
+%3= mul %2, 1919810
+store %3, @z
+%4 = load @z
+%5= eq 0, %4
+ret %5
 }
