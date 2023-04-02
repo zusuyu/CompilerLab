@@ -4,8 +4,10 @@
 #include "util.hpp"
 
 std::ofstream koopa_ofs;
-std::unordered_map<std::string, Value> Map;
+std::unordered_map<std::string, Value> Map[1024]; // symbol table for different depth
 int RegCount = 0;
+int BlockDepth = 0;
+int BlockCount = 0;
 
 void BaseAST::storeValue(Result res) const {
     return;
@@ -31,9 +33,13 @@ Result FuncTypeAST::DumpKoopa() const {
 }
 
 Result BlockAST::DumpKoopa() const {
+    ++BlockDepth;
+    ++BlockCount;    
+    Map[BlockDepth].clear();
     for (auto &ptr: this->block_item) {
         ptr->DumpKoopa();
     }
+    --BlockDepth;
     return Result();
 }
 
@@ -56,21 +62,21 @@ Result BTypeAST::DumpKoopa() const {
 }
 
 Result ConstDefAST::DumpKoopa() const {
-    assert(Map.find(this->ident) == Map.end()); // undefined identifier
+    assert(Map[BlockDepth].find(this->ident) == Map[BlockDepth].end()); // undefined identifier
     Result res = this->const_init_val->DumpKoopa();
     assert(res.which == Result::ResultEnum::imm); // must be const
-    Map[this->ident] = Const(res.val);
+    Map[BlockDepth][this->ident] = Const(res.val);
     return Result();        
 }
 
 Result VarDefAST::DumpKoopa() const {
-    assert(Map.find(this->ident) == Map.end()); // undefined identifier
-    koopa_ofs << "@" << this->ident << " = alloc i32\n";
+    assert(Map[BlockDepth].find(this->ident) == Map[BlockDepth].end()); // undefined identifier
+    koopa_ofs << "@" << this->ident << "_" << BlockDepth << " = alloc i32\n";
     if (this->init_val != nullptr) {
         Result res = this->init_val->DumpKoopa();
-        koopa_ofs << "store " << res << ", @" << this->ident << "\n";
+        koopa_ofs << "store " << res << ", @" << this->ident << "_" << BlockDepth << "\n";
     }
-    Map[this->ident] = Var;
+    Map[BlockDepth][this->ident] = Var;
     return Result();
 }
 
@@ -87,29 +93,49 @@ Result ConstExpAST::DumpKoopa() const {
 }
 
 Result StmtAST::DumpKoopa() const {
-    if (this->which == StmtAST::StmtEnum::ret) {
+    if (this->which == StmtAST::StmtEnum::ret_with_value) {
         Result res = this->exp->DumpKoopa();
         koopa_ofs << "ret " << res << "\n";
-        return Result();
-    } else {
-        this->lval->storeValue(this->exp->DumpKoopa());
-        return Result();
     }
+    else if (this->which == StmtAST::StmtEnum::ret_without_value) {
+        koopa_ofs << "ret\n";
+    }
+    else if (this->which == StmtAST::StmtEnum::assignment) {
+        this->lval->storeValue(this->exp->DumpKoopa());
+    }
+    else if (this->which == StmtAST::StmtEnum::another_block) {
+        this->block->DumpKoopa();
+    }
+    else if (this->which == StmtAST::StmtEnum::exp) {
+        this->exp->DumpKoopa();
+    }
+    return Result();
 }
 
 Result LValAST::DumpKoopa() const  {
-    auto it = Map.find(this->ident);
-    assert(it != Map.end());  // defined identifier
-    if (it->second.which == Value::ValueEnum::const_) {
-        return Imm(it->second.val);
-    } else {
-        Result d = Reg(RegCount++);
-        koopa_ofs << d << " = load @" << this->ident << "\n";
-        return d;
-    }        
+    for (int d = BlockDepth; d >= 0; --d) {
+        auto it = Map[d].find(this->ident);
+        if (it != Map[d].end()) {
+            if (it->second.which == Value::ValueEnum::const_) {
+                return Imm(it->second.val);
+            }
+            else {
+                Result res = Reg(RegCount++);
+                koopa_ofs << res << " = load @" << this->ident << "_" << d << "\n";
+                return res;
+            }
+        }
+    }
+    return Result();
 }
+
 void LValAST::storeValue(Result res) const {
-    koopa_ofs << "store " << res << ", @" << this->ident << "\n";
+    for (int d = BlockDepth; d >= 0; --d) {
+        if (Map[d].find(this->ident) != Map[d].end()) {
+            koopa_ofs << "store " << res << ", @" << this->ident << "_" << d << "\n";
+            return;
+        }
+    }
 }
 
 Result ExpAST::DumpKoopa() const {
@@ -142,7 +168,8 @@ Result EqExpAST::DumpKoopa() const {
     Result s2 = this->rel_exp->DumpKoopa();
     if (this->which == EqExpAST::EqExpEnum::eq) {
         return calc("eq", s1, s2);
-    } else {
+    }
+    else {
         return calc("ne", s1, s2);
     }
 }
@@ -155,11 +182,14 @@ Result RelExpAST::DumpKoopa() const {
     Result s2 = this->add_exp->DumpKoopa();
     if (this->which == RelExpAST::RelExpEnum::lt) {
         return calc("lt", s1, s2);
-    } else if (this->which == RelExpAST::RelExpEnum::gt) {
+    }
+    else if (this->which == RelExpAST::RelExpEnum::gt) {
         return calc("gt", s1, s2);
-    } else if (this->which == RelExpAST::RelExpEnum::le) {
+    }
+    else if (this->which == RelExpAST::RelExpEnum::le) {
         return calc("le", s1, s2);
-    } else {
+    }
+    else {
         return calc("ge", s1, s2);
     }
 }
@@ -172,7 +202,8 @@ Result AddExpAST::DumpKoopa() const {
     Result s2 = this->mul_exp->DumpKoopa();
     if (this->which == AddExpAST::AddExpEnum::add) {
         return calc("add", s1, s2);
-    } else {
+    }
+    else {
         return calc("sub", s1, s2);
     }
 }
@@ -185,9 +216,11 @@ Result MulExpAST::DumpKoopa() const {
     Result s2 = this->unary_exp->DumpKoopa();
     if (this->which == MulExpAST::MulExpEnum::mul) {
         return calc("mul", s1, s2);
-    } else if (this->which == MulExpAST::MulExpEnum::div) {
+    }
+    else if (this->which == MulExpAST::MulExpEnum::div) {
         return calc("div", s1, s2);
-    } else {
+    }
+    else {
         return calc("mod", s1, s2);
     }
 }
@@ -202,7 +235,8 @@ Result UnaryExpAST::DumpKoopa() const {
     Result s = this->unary_exp->DumpKoopa();
     if (this->which == UnaryExpAST::UnaryExpEnum::neg) {
         return calc("sub", Imm(0), s);
-    } else { 
+    }
+    else { 
         return calc("eq", Imm(0), s);
     }
 }
@@ -210,9 +244,11 @@ Result UnaryExpAST::DumpKoopa() const {
 Result PrimaryExpAST::DumpKoopa() const {
     if (this->which == PrimaryExpAST::PrimaryExpEnum::into_number) {
         return Imm(this->number);
-    } else if (this->which == PrimaryExpAST::PrimaryExpEnum::into_lval){
+    }
+    else if (this->which == PrimaryExpAST::PrimaryExpEnum::into_lval){
         return this->lval->DumpKoopa();
-    } else {
+    }
+    else {
         return this->exp->DumpKoopa();
     }
 }

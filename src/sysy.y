@@ -189,17 +189,39 @@ InitVal:
   };
 
 Stmt: 
+  LVal '=' Exp ';' {
+    auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::assignment;
+    ast->lval = unique_ptr<BaseAST>($1);
+    ast->exp = unique_ptr<BaseAST>($3);
+    $$ = ast;
+  } |
   RETURN Exp ';' {
     auto ast = new StmtAST();
-    ast->which = StmtAST::StmtEnum::ret;
+    ast->which = StmtAST::StmtEnum::ret_with_value;
     ast->exp = unique_ptr<BaseAST>($2);
     $$ = ast;
   } | 
-  LVal '=' Exp ';' {
+  RETURN ';' {
     auto ast = new StmtAST();
-    ast->which = StmtAST::StmtEnum::assign;
-    ast->lval = unique_ptr<BaseAST>($1);
-    ast->exp = unique_ptr<BaseAST>($3);
+    ast->which = StmtAST::StmtEnum::ret_without_value;
+    $$ = ast;
+  } |
+  Block {
+    auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::another_block;
+    ast->block = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } |
+  Exp ';' {
+    auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::exp;
+    ast->exp = unique_ptr<BaseAST>($1);
+    $$ = ast;
+  } |
+  ';' {
+    auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::empty;
     $$ = ast;
   };
 

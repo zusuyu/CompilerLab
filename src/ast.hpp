@@ -89,8 +89,8 @@ public:
 
 class StmtAST : public BaseAST {
 public:
-    enum class StmtEnum {assign, ret} which;
-    std::unique_ptr<BaseAST> lval, exp;
+    enum class StmtEnum {assignment, ret_with_value, ret_without_value, another_block, exp, empty} which;
+    std::unique_ptr<BaseAST> lval, exp, block;
     Result DumpKoopa() const override;
 };
 

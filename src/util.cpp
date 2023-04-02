@@ -26,7 +26,7 @@ extern int RegCount;
 Result calc(std::string oprand, Result s1, Result s2) {
     if (s1.which == Result::ResultEnum::reg || s2.which == Result::ResultEnum::reg) {
         Result d = Reg(RegCount++);
-        koopa_ofs << d << "= " << oprand << " " << s1 << ", " << s2 << "\n";
+        koopa_ofs << d << " = " << oprand << " " << s1 << ", " << s2 << "\n";
         return d;
     }
     if (oprand == "ne") {
