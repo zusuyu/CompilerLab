@@ -6,10 +6,12 @@
 extern std::ofstream koopa_ofs;
 std::unordered_map<std::string, Value> Map[1024]; // symbol table for different depth
 int BlockID[1024];
+int WhileID[1024];
 int RegCount = 0;
 int BlockDepth = 0;
 int BlockCount = 0;
-int IfCount = 0;
+int BranchCount = 0;
+int WhileDepth = 0;
 bool BasicBlockEnds = false;
 
 void BaseAST::storeValue(Result res) const {
@@ -105,7 +107,7 @@ Result StmtAST::DumpKoopa() const {
     }
     else if (this->which == StmtAST::StmtEnum::if_) {
         Result res = this->exp->DumpKoopa();
-        int id = ++IfCount;
+        int id = ++BranchCount;
         if (this->else_stmt != nullptr) {
             koopa_inst("br ", res, ", %then", id, ", %else", id);
             koopa_basic_block("then" + std::to_string(id));
@@ -123,6 +125,28 @@ Result StmtAST::DumpKoopa() const {
             koopa_inst("jump %end", id);
             koopa_basic_block("end" + std::to_string(id));
         }
+    }
+    else if (this->which == StmtAST::StmtEnum::while_) {
+        int id = WhileID[++WhileDepth] = ++BranchCount;
+        koopa_inst("jump %while_entry", id);
+        koopa_basic_block("while_entry" + std::to_string(id));
+        Result res = this->exp->DumpKoopa();
+        koopa_inst("br ", res, ", %while_body", id, ", %while_end", id);
+        koopa_basic_block("while_body" + std::to_string(id));
+        this->then_stmt->DumpKoopa();
+        koopa_inst("jump %while_entry", id);
+        koopa_basic_block("while_end" + std::to_string(id));
+        --WhileDepth;
+    }
+    else if (this->which == StmtAST::StmtEnum::break_) {
+        assert(WhileDepth > 0);
+        koopa_inst("jump %while_end", WhileID[WhileDepth]);
+        koopa_basic_block("break" + std::to_string(++BranchCount));
+    }
+    else if (this->which == StmtAST::StmtEnum::continue_) {
+        assert(WhileDepth > 0);
+        koopa_inst("jump %while_entry", WhileID[WhileDepth]);
+        koopa_basic_block("continue" + std::to_string(++BranchCount));
     }
     else if (this->which == StmtAST::StmtEnum::ret) {
         if (this->exp != nullptr) {
@@ -186,7 +210,7 @@ Result LogicalOrExpAST::DumpKoopa() const {
             return calc("ne", s2, Imm(0));
         }
     } else {
-        int id = ++IfCount;
+        int id = ++BranchCount;
         koopa_inst("@result", id, " = alloc i32");
         koopa_inst("br ", s1, ", %then", id, ", %else", id);
         koopa_basic_block("then" + std::to_string(id));
@@ -217,7 +241,7 @@ Result LogicalAndExpAST::DumpKoopa() const {
             return calc("ne", s2, Imm(0));
         }
     } else {
-        int id = ++IfCount;
+        int id = ++BranchCount;
         koopa_inst("@result", id, " = alloc i32");
         koopa_inst("br ", s1, ", %then", id, ", %else", id);
         koopa_basic_block("then" + std::to_string(id));
