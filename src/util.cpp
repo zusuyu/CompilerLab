@@ -22,53 +22,69 @@ Value::Value(ValueEnum which_, int val_) {
 
 extern std::ofstream koopa_ofs;
 extern int RegCount;
+extern bool BasicBlockEnds;
 
-Result calc(std::string oprand, Result s1, Result s2) {
+void koopa_basic_block(std::string label) {
+    koopa_print("\n%", label, ":");
+    BasicBlockEnds = false;
+}
+void koopa_ret(Result res) {
+    if (!BasicBlockEnds)
+        koopa_print("  ret ", res);
+    BasicBlockEnds = true;
+}
+void koopa_ret() {
+    if (!BasicBlockEnds)
+        koopa_print("  ret");
+    BasicBlockEnds = true;
+}
+
+Result calc(std::string op, Result s1, Result s2) {
     if (s1.which == Result::ResultEnum::reg || s2.which == Result::ResultEnum::reg) {
         Result d = Reg(RegCount++);
-        koopa_ofs << d << " = " << oprand << " " << s1 << ", " << s2 << "\n";
+        koopa_inst(d, " = ", op, " ", s1, ", ", s2);
         return d;
     }
-    if (oprand == "ne") {
+    if (op == "ne") {
         return Imm(s1.val != s2.val);
     }
-    if (oprand == "eq") {
+    if (op == "eq") {
         return Imm(s1.val == s2.val);
     }
-    if (oprand == "gt") {
+    if (op == "gt") {
         return Imm(s1.val > s2.val);
     }
-    if (oprand == "lt") {
+    if (op == "lt") {
         return Imm(s1.val < s2.val);
     }
-    if (oprand == "ge") {
+    if (op == "ge") {
         return Imm(s1.val >= s2.val);
     }
-    if (oprand == "le") {
+    if (op == "le") {
         return Imm(s1.val <= s2.val);
     }
-    if (oprand == "add") {
+    if (op == "add") {
         return Imm(s1.val + s2.val);
     }
-    if (oprand == "sub") {
+    if (op == "sub") {
         return Imm(s1.val - s2.val);
     }
-    if (oprand == "mul") {
+    if (op == "mul") {
         return Imm(s1.val * s2.val);
     }
-    if (oprand == "div") {
+    if (op == "div") {
         return Imm(s1.val / s2.val);
     }
-    if (oprand == "mod") {
+    if (op == "mod") {
         return Imm(s1.val % s2.val);
     }
-    if (oprand == "and") {
+    if (op == "and") {
         return Imm(s1.val & s2.val);
     }
-    if (oprand == "or") {
+    if (op == "or") {
         return Imm(s1.val | s2.val);
     }
-    if (oprand == "xor") {
+    if (op == "xor") {
         return Imm(s1.val ^ s2.val);
     }
     return Result();    

@@ -25,4 +25,25 @@ public:
 #define Const(v) (Value(Value::ValueEnum::const_, (v)))
 #define Var (Value(Value::ValueEnum::var_, 0))
 
+extern std::ofstream koopa_ofs;
+extern bool BasicBlockEnds;
+
+template<typename T>
+void koopa_print(T arg) {
+    koopa_ofs << arg << "\n";
+}
+template<typename T, typename... Ts>
+void koopa_print(T arg0, Ts... args) {
+    koopa_ofs << arg0;
+    koopa_print(args...);
+}
+template<typename... Ts>
+void koopa_inst(Ts... args) {
+    if (!BasicBlockEnds)
+        koopa_print("  ", args...);
+}
+void koopa_basic_block(std::string label);
+void koopa_ret(Result res);
+void koopa_ret();
+
 Result calc(std::string oprand, Result s1, Result s2);

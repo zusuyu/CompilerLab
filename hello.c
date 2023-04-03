@@ -1,30 +1,9 @@
-/* block comment in a line */
-
 int main() {
-  // 忽略我的存在
-  /* ??? */
-
-  int a = 1;
-  int b = 2;
-  {
-    int a = 3;
-    b = a * a;
-  }
-  {
-    int c = 4;
-    return a + b + c;
-
-  }
-
-  /* **** */
+  int x = 1;
+  if (111)
+    if (222)
+      x = x + 222;
+    else
+      x = x - 222;
+  return x;
 }
-
-/*
-
-  block
-  comment
-  in
-  many
-  lines
-
-*/

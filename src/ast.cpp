@@ -3,11 +3,14 @@
 #include "ast.hpp"
 #include "util.hpp"
 
-std::ofstream koopa_ofs;
+extern std::ofstream koopa_ofs;
 std::unordered_map<std::string, Value> Map[1024]; // symbol table for different depth
+int BlockID[1024];
 int RegCount = 0;
 int BlockDepth = 0;
 int BlockCount = 0;
+int IfCount = 0;
+bool BasicBlockEnds = false;
 
 void BaseAST::storeValue(Result res) const {
     return;
@@ -21,7 +24,8 @@ Result CompUnitAST::DumpKoopa() const {
 Result FuncDefAST::DumpKoopa() const {
     koopa_ofs << "fun @" << this->ident << "(): ";
     this->func_type->DumpKoopa();
-    koopa_ofs << " {\n" << "%entry:\n";
+    koopa_ofs << " {\n";
+    koopa_basic_block("entry");
     this->block->DumpKoopa();
     koopa_ofs << "}\n";
     return Result();
@@ -33,8 +37,9 @@ Result FuncTypeAST::DumpKoopa() const {
 }
 
 Result BlockAST::DumpKoopa() const {
-    ++BlockDepth;
-    ++BlockCount;    
+    if (BasicBlockEnds)
+        return Result();
+    BlockID[++BlockDepth] = ++BlockCount;
     Map[BlockDepth].clear();
     for (auto &ptr: this->block_item) {
         ptr->DumpKoopa();
@@ -66,15 +71,15 @@ Result ConstDefAST::DumpKoopa() const {
     Result res = this->const_init_val->DumpKoopa();
     assert(res.which == Result::ResultEnum::imm); // must be const
     Map[BlockDepth][this->ident] = Const(res.val);
-    return Result();        
+    return Result();
 }
 
 Result VarDefAST::DumpKoopa() const {
     assert(Map[BlockDepth].find(this->ident) == Map[BlockDepth].end()); // undefined identifier
-    koopa_ofs << "@" << this->ident << "_" << BlockDepth << " = alloc i32\n";
+    koopa_inst("@", this->ident, "_", BlockID[BlockDepth], " = alloc i32");
     if (this->init_val != nullptr) {
         Result res = this->init_val->DumpKoopa();
-        koopa_ofs << "store " << res << ", @" << this->ident << "_" << BlockDepth << "\n";
+        koopa_inst("store ", res, ", @", this->ident, "_", BlockID[BlockDepth]);
     }
     Map[BlockDepth][this->ident] = Var;
     return Result();
@@ -93,15 +98,41 @@ Result ConstExpAST::DumpKoopa() const {
 }
 
 Result StmtAST::DumpKoopa() const {
-    if (this->which == StmtAST::StmtEnum::ret_with_value) {
-        Result res = this->exp->DumpKoopa();
-        koopa_ofs << "ret " << res << "\n";
-    }
-    else if (this->which == StmtAST::StmtEnum::ret_without_value) {
-        koopa_ofs << "ret\n";
-    }
-    else if (this->which == StmtAST::StmtEnum::assignment) {
+    if (BasicBlockEnds)
+        return Result();
+    if (this->which == StmtAST::StmtEnum::assign) {
         this->lval->storeValue(this->exp->DumpKoopa());
+    }
+    else if (this->which == StmtAST::StmtEnum::if_) {
+        Result res = this->exp->DumpKoopa();
+        int id = ++IfCount;
+        if (this->else_stmt != nullptr) {
+            koopa_inst("br ", res, ", %then", id, ", %else", id);
+            koopa_basic_block("then" + std::to_string(id));
+            this->then_stmt->DumpKoopa();
+            koopa_inst("jump %end", id);
+            koopa_basic_block("else" + std::to_string(id));
+            this->else_stmt->DumpKoopa();
+            koopa_inst("jump %end", id);
+            koopa_basic_block("end" + std::to_string(id));
+        }
+        else {
+            koopa_inst("br ", res, ", %then", id, ", %end", id);
+            koopa_basic_block("then" + std::to_string(id));
+            this->then_stmt->DumpKoopa();
+            koopa_inst("jump %end", id);
+            koopa_basic_block("end" + std::to_string(id));
+        }
+    }
+    else if (this->which == StmtAST::StmtEnum::ret) {
+        if (this->exp != nullptr) {
+            Result res = this->exp->DumpKoopa();
+            koopa_ret(res);
+        }
+        else {
+            koopa_ret();
+        }
+        BasicBlockEnds = true;
     }
     else if (this->which == StmtAST::StmtEnum::another_block) {
         this->block->DumpKoopa();
@@ -121,7 +152,7 @@ Result LValAST::DumpKoopa() const  {
             }
             else {
                 Result res = Reg(RegCount++);
-                koopa_ofs << res << " = load @" << this->ident << "_" << d << "\n";
+                koopa_inst(res, " = load @", this->ident, "_", BlockID[d]);
                 return res;
             }
         }
@@ -132,7 +163,7 @@ Result LValAST::DumpKoopa() const  {
 void LValAST::storeValue(Result res) const {
     for (int d = BlockDepth; d >= 0; --d) {
         if (Map[d].find(this->ident) != Map[d].end()) {
-            koopa_ofs << "store " << res << ", @" << this->ident << "_" << d << "\n";
+            koopa_inst("store ", res, ", @", this->ident, "_", BlockID[d]);
             return;
         }
     }

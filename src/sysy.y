@@ -38,7 +38,7 @@ using namespace std;
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
 
-%token INT RETURN CONST
+%token INT RETURN CONST IF ELSE
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 
@@ -47,7 +47,7 @@ using namespace std;
                 BlockItem BType 
                 ConstDecl ConstDef ConstInitVal ConstExp 
                 VarDecl VarDef InitVal
-                Stmt LVal
+                Stmt MatchedStmt OpenStmt LVal
                 Exp UnaryExp PrimaryExp MulExp AddExp RelExp EqExp LogicalAndExp LogicalOrExp
 %type <int_val> Number
 %type <vec_val> MoreBlockItem MoreConstDef MoreVarDef
@@ -189,22 +189,39 @@ InitVal:
   };
 
 Stmt: 
+  MatchedStmt {
+    $$ = $1;
+  } | 
+  OpenStmt {
+    $$ = $1;
+  };
+
+MatchedStmt:
   LVal '=' Exp ';' {
     auto ast = new StmtAST();
-    ast->which = StmtAST::StmtEnum::assignment;
+    ast->which = StmtAST::StmtEnum::assign;
     ast->lval = unique_ptr<BaseAST>($1);
     ast->exp = unique_ptr<BaseAST>($3);
     $$ = ast;
   } |
+  IF '(' Exp ')' MatchedStmt ELSE MatchedStmt {
+    auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::if_;
+    ast->exp = unique_ptr<BaseAST>($3);
+    ast->then_stmt = unique_ptr<BaseAST>($5);
+    ast->else_stmt = unique_ptr<BaseAST>($7);
+    $$ = ast;
+  } |
   RETURN Exp ';' {
     auto ast = new StmtAST();
-    ast->which = StmtAST::StmtEnum::ret_with_value;
+    ast->which = StmtAST::StmtEnum::ret;
     ast->exp = unique_ptr<BaseAST>($2);
     $$ = ast;
   } | 
   RETURN ';' {
     auto ast = new StmtAST();
-    ast->which = StmtAST::StmtEnum::ret_without_value;
+    ast->which = StmtAST::StmtEnum::ret;
+    ast->exp = nullptr;
     $$ = ast;
   } |
   Block {
@@ -224,6 +241,25 @@ Stmt:
     ast->which = StmtAST::StmtEnum::empty;
     $$ = ast;
   };
+
+OpenStmt:
+  IF '(' Exp ')' Stmt {
+    auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::if_;
+    ast->exp = unique_ptr<BaseAST>($3);
+    ast->then_stmt = unique_ptr<BaseAST>($5);
+    ast->else_stmt = nullptr;
+    $$ = ast;
+  } | 
+  IF '(' Exp ')' MatchedStmt ELSE OpenStmt {
+    auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::if_;
+    ast->exp = unique_ptr<BaseAST>($3);
+    ast->then_stmt = unique_ptr<BaseAST>($5);
+    ast->else_stmt = unique_ptr<BaseAST>($7);
+    $$ = ast;
+  };
+
 
 LVal:
   IDENT {

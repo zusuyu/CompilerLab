@@ -89,8 +89,8 @@ public:
 
 class StmtAST : public BaseAST {
 public:
-    enum class StmtEnum {assignment, ret_with_value, ret_without_value, another_block, exp, empty} which;
-    std::unique_ptr<BaseAST> lval, exp, block;
+    enum class StmtEnum {assign, if_, ret, another_block, exp, empty} which;
+    std::unique_ptr<BaseAST> lval, exp, then_stmt, else_stmt, block;
     Result DumpKoopa() const override;
 };
 
@@ -163,3 +163,12 @@ public:
     int number;
     Result DumpKoopa() const override;
 };
+
+template<typename... Ts>
+void koopa_inst(Ts... args);
+
+void koopa_basic_block(std::string label);
+void koopa_ret(Result res);
+void koopa_ret();
+
+Result calc(std::string oprand, Result s1, Result s2);
