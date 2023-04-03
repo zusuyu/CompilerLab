@@ -1,11 +1,10 @@
 int main() {
-  int i = 0;
-  int sum = 0;
-  while (i < 10) {
-    sum = sum + i;
-    if (sum > 30) 
-      break;
-    i = i + 1;
+  int a = 2;
+  if (a) {
+    a = a + 1;
+    return 233;
+  } else {
+    return 666;
   }
-  return i;
+  return a;
 }

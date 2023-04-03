@@ -5,6 +5,7 @@
 docker run -it --rm -v C:\Lecture-Notes\compiler\lab\lab-cpp:/root/compiler maxxing/compiler-dev bash
 
 ./compiler -koopa ../hello.c -o ../hello.koopa
+./compiler -riscv ../hello.c -o ../hello.S
 
 autotest -koopa -s lv4 /root/compiler/
 
