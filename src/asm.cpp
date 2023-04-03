@@ -2,8 +2,10 @@
 
 #include "koopa.h"
 
+#define FrameSize 32
+
 extern std::ofstream riscv_ofs;
-int Offset;
+int Offset, TotalSize;
 
 std::unordered_map<koopa_raw_value_t, int> Map; // map koopa_raw_value_t to offset on stack
 
@@ -11,7 +13,7 @@ void move_to_reg(koopa_raw_value_t value, std::string dest_reg) {
     if (value->kind.tag == KOOPA_RVT_INTEGER) {
         riscv_ofs << "    li " << dest_reg << ", " << value->kind.data.integer.value << "\n";
     } else {
-        riscv_ofs << "    lw " << dest_reg << ", " << Map[value] << "(sp)\n";
+        riscv_ofs << "    lw " << dest_reg << ", " << Map[value] << "(fp)\n";
     }
 }
 
@@ -71,9 +73,13 @@ void solve_binary(koopa_raw_value_t value) {
             riscv_ofs << "    xor t0, t0, t1\n";
             break;
     }
-    riscv_ofs << "    sw t0, " << Offset << "(sp)\n";
-    Map[value] = Offset;
+    if (Offset == TotalSize) {
+        riscv_ofs << "    addi sp, sp, " << -FrameSize << "\n";
+        TotalSize += FrameSize;
+    }
     Offset += 4;
+    Map[value] = -Offset;
+    riscv_ofs << "    sw t0, " << Map[value] << "(fp)\n";
 }
 
 void solve_alloc(koopa_raw_value_t value) {
@@ -97,10 +103,14 @@ void solve_jump(koopa_raw_value_t value) {
 void solve_store(koopa_raw_value_t value) {
     move_to_reg(value->kind.data.store.value, "t0");
     if (Map.find(value->kind.data.store.dest) == Map.end()) {
-        Map[value->kind.data.store.dest] = Offset;
+        if (Offset == TotalSize) {
+            riscv_ofs << "    addi sp, sp, " << -FrameSize << "\n";
+            TotalSize += FrameSize;
+        }
         Offset += 4;
+        Map[value->kind.data.store.dest] = -Offset;
     }
-    riscv_ofs << "    sw t0, " << Map[value->kind.data.store.dest] << "(sp)\n";
+    riscv_ofs << "    sw t0, " << Map[value->kind.data.store.dest] << "(fp)\n";
 }
 
 void parse_koopa(const char* str) {
@@ -122,8 +132,11 @@ void parse_koopa(const char* str) {
         riscv_ofs << "    .globl " << func->name + 1 << "\n"; // func->name[0] = '@'
         riscv_ofs << func->name + 1 << ":\n";
 
-        riscv_ofs << "    addi sp, sp, -256\n";
-        Offset = 0;
+        riscv_ofs << "    sw fp, -4(sp)\n";
+        riscv_ofs << "    mv fp, sp\n";
+        riscv_ofs << "    addi sp, sp, " << -FrameSize << "\n";
+        Offset = 4;
+        TotalSize = FrameSize;
 
         for (int j = 0; j < func->bbs.len; ++j) {
 
@@ -160,7 +173,9 @@ void parse_koopa(const char* str) {
             }
         }
         riscv_ofs << "FuncReturn" << i << ":\n";
-        riscv_ofs << "    addi sp, sp, 256\n";
+        riscv_ofs << "    addi sp, sp, " << TotalSize << "\n";
+        riscv_ofs << "    mv sp, fp\n";
+        riscv_ofs << "    lw fp, -4(sp)\n";
         riscv_ofs << "    ret\n\n";
     }
 
