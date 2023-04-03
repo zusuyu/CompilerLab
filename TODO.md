@@ -1,10 +1,4 @@
 
-
-Not implemented:
-    short-circuit evaluation
-
-每个基本块出现 ret 后设置全局标记, 直到下一个基本块开始 koopa_ofs 都不应该输出
-
 (?) 把 @name 也弄进 Result
 
 

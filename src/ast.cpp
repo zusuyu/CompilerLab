@@ -178,8 +178,30 @@ Result LogicalOrExpAST::DumpKoopa() const {
         return this->logical_and_exp->DumpKoopa();
     }
     Result s1 = this->logical_or_exp->DumpKoopa();
-    Result s2 = this->logical_and_exp->DumpKoopa();
-    return calc("ne", calc("or", s1, s2), Imm(0));
+    if (s1.which == Result::ResultEnum::imm) {
+        if (s1.val != 0)
+            return Imm(1);
+        else {
+            Result s2 = this->logical_and_exp->DumpKoopa();
+            return calc("ne", s2, Imm(0));
+        }
+    } else {
+        int id = ++IfCount;
+        koopa_inst("@result", id, " = alloc i32");
+        koopa_inst("br ", s1, ", %then", id, ", %else", id);
+        koopa_basic_block("then" + std::to_string(id));
+        koopa_inst("store 1, @result", id);
+        koopa_inst("jump %end", id);
+        koopa_basic_block("else" + std::to_string(id));
+        Result s2 = this->logical_and_exp->DumpKoopa();
+        s2 = calc("ne", s2, Imm(0));
+        koopa_inst("store ", s2, ", @result", id);
+        koopa_inst("jump %end", id);
+        koopa_basic_block("end" + std::to_string(id));
+        Result res = Reg(RegCount++);
+        koopa_inst(res, " = load @result", id);
+        return res;
+    }
 }
 
 Result LogicalAndExpAST::DumpKoopa() const {
@@ -187,8 +209,30 @@ Result LogicalAndExpAST::DumpKoopa() const {
         return this->eq_exp->DumpKoopa();
     }
     Result s1 = this->logical_and_exp->DumpKoopa();
-    Result s2 = this->eq_exp->DumpKoopa();
-    return calc("and", calc("ne", s1, Imm(0)), calc("ne", s2, Imm(0)));
+    if (s1.which == Result::ResultEnum::imm) {
+        if (s1.val == 0)
+            return Imm(0);
+        else {
+            Result s2 = this->logical_and_exp->DumpKoopa();
+            return calc("ne", s2, Imm(0));
+        }
+    } else {
+        int id = ++IfCount;
+        koopa_inst("@result", id, " = alloc i32");
+        koopa_inst("br ", s1, ", %then", id, ", %else", id);
+        koopa_basic_block("then" + std::to_string(id));
+        Result s2 = this->eq_exp->DumpKoopa();
+        s2 = calc("ne", s2, Imm(0));
+        koopa_inst("store ", s2, ", @result", id);
+        koopa_inst("jump %end", id);
+        koopa_basic_block("else" + std::to_string(id));
+        koopa_inst("store 0, @result", id);
+        koopa_inst("jump %end", id);
+        koopa_basic_block("end" + std::to_string(id));
+        Result res = Reg(RegCount++);
+        koopa_inst(res, " = load @result", id);
+        return res;
+    }
 }
 
 Result EqExpAST::DumpKoopa() const {
