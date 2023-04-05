@@ -9,9 +9,9 @@ public:
     virtual void storeValue(Result res) const;
 };
 
-class CompUnitAST : public BaseAST {
+class ProgramAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> func_def;
+    std::vector<std::unique_ptr<BaseAST>> comp_units; // could be function def, global constant decl, or global variable decl
     Result DumpKoopa() const override;
 };
 
@@ -19,39 +19,41 @@ class FuncDefAST : public BaseAST {
 public:
     std::unique_ptr<BaseAST> func_type;
     std::string ident;
+    std::vector<std::unique_ptr<BaseAST>> func_params;
     std::unique_ptr<BaseAST> block;
     Result DumpKoopa() const override;
 };
 
-class FuncTypeAST : public BaseAST {
+class TypeAST : public BaseAST {
 public:
     std::string type;
+    Result DumpKoopa() const override;
+};
+
+class FuncParamAST : public BaseAST {
+public:
+    std::string ident;
+    std::unique_ptr<BaseAST> type;
     Result DumpKoopa() const override;
 };
 
 class BlockAST : public BaseAST {
 public:
-    std::vector<std::unique_ptr<BaseAST>> block_item; // could be ConstDecl, ValDecl or Stmt
+    std::vector<std::unique_ptr<BaseAST>> block_items; // could be ConstDecl, ValDecl or Stmt
     Result DumpKoopa() const override;
 };
 
 class ConstDeclAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> btype;
-    std::vector<std::unique_ptr<BaseAST>> const_def;
+    std::unique_ptr<BaseAST> type;
+    std::vector<std::unique_ptr<BaseAST>> const_defs;
     Result DumpKoopa() const override;
 };
 
 class VarDeclAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> btype;
-    std::vector<std::unique_ptr<BaseAST>> var_def;
-    Result DumpKoopa() const override;
-};
-
-class BTypeAST : public BaseAST {
-public:
-    std::string type;
+    std::unique_ptr<BaseAST> type;
+    std::vector<std::unique_ptr<BaseAST>> var_defs;
     Result DumpKoopa() const override;
 };
 
@@ -151,8 +153,10 @@ public:
 
 class UnaryExpAST : public BaseAST {
 public:
-    enum class UnaryExpEnum {into_primary, pos, neg, logical_neg} which;
+    enum class UnaryExpEnum {into_primary, pos, neg, logical_neg, func_call} which;
     std::unique_ptr<BaseAST> unary_exp, primary_exp;
+    std::string ident;
+    std::vector<std::unique_ptr<BaseAST>> call_params;
     Result DumpKoopa() const override;
 };
 

@@ -16,14 +16,16 @@ public:
 
 class Value {
 public:
-    enum class ValueEnum {const_, var_} which;
-    int val;
+    enum class ValueEnum {const_, var_, func_int, func_void} which;
+    int const_val;
     Value();
-    Value(ValueEnum which_, int val_);
+    Value(ValueEnum which_, int const_val_);
 };
 
 #define Const(v) (Value(Value::ValueEnum::const_, (v)))
 #define Var (Value(Value::ValueEnum::var_, 0))
+#define FuncInt (Value(Value::ValueEnum::func_int, 0))
+#define FuncVoid (Value(Value::ValueEnum::func_void, 0))
 
 extern std::ofstream koopa_ofs;
 extern bool BasicBlockEnds;

@@ -15,9 +15,9 @@ std::ostream & operator << (std::ostream &ofs, Result res) {
 }
 
 Value::Value() {}
-Value::Value(ValueEnum which_, int val_) {
+Value::Value(ValueEnum which_, int const_val_) {
     which = which_;
-    val = val_;
+    const_val = const_val_;
 }
 
 extern std::ofstream koopa_ofs;

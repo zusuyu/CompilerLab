@@ -13,28 +13,67 @@ int BlockCount = 0;
 int BranchCount = 0;
 int WhileDepth = 0;
 bool BasicBlockEnds = false;
+std::string func_params_to_print;
+std::vector<std::pair<std::string, Value>> func_params_to_map;
 
 void BaseAST::storeValue(Result res) const {
     return;
 }
 
-Result CompUnitAST::DumpKoopa() const {
-    this->func_def->DumpKoopa();
+Result ProgramAST::DumpKoopa() const {
+    /* lib_funcs */
+    koopa_ofs << "decl @getint(): i32\n";
+    koopa_ofs << "decl @getch(): i32\n";
+    koopa_ofs << "decl @getarray(*i32): i32\n";
+    koopa_ofs << "decl @putint(i32)\n";
+    koopa_ofs << "decl @putch(i32)\n";
+    koopa_ofs << "decl @putarray(i32, *i32)\n";
+    koopa_ofs << "decl @starttime()\n";
+    koopa_ofs << "decl @stoptime()\n";
+    Map[0]["getint"] = Map[0]["getch"] = Map[0]["getarray"] = FuncInt;
+    Map[0]["putint"] = Map[0]["putch"] = Map[0]["Putarray"] = Map[0]["starttime"] = Map[0]["stoptime"] = FuncVoid;
+
+    for (auto &ptr: this->comp_units) {
+        ptr->DumpKoopa();
+    }
     return Result();
 }
 
 Result FuncDefAST::DumpKoopa() const {
-    koopa_ofs << "fun @" << this->ident << "(): ";
-    this->func_type->DumpKoopa();
+    koopa_ofs << "fun @" << this->ident << "(";
+    for (auto it = this->func_params.begin(); it != this->func_params.end(); ++it) {
+        if (it != this->func_params.begin())
+            koopa_ofs << ", ";
+        (*it)->DumpKoopa();
+    }
+    koopa_ofs << ")";
+    if (this->func_type->DumpKoopa().val == 0)
+        Map[0][this->ident] = FuncVoid;
+    else
+        Map[0][this->ident] = FuncInt;
     koopa_ofs << " {\n";
     koopa_basic_block("entry");
     this->block->DumpKoopa();
-    koopa_ofs << "}\n";
+    if (!BasicBlockEnds) {
+        // add a "ret" instruction for unreturned void function
+        assert(Map[0][this->ident].which == Value::ValueEnum::func_void);
+        koopa_ret();
+    }
+    koopa_ofs << "\n}\n\n";
     return Result();
 }
 
-Result FuncTypeAST::DumpKoopa() const {
+Result TypeAST::DumpKoopa() const {
     koopa_ofs << this->type;
+    return Imm(this->type == "" ? 0 : 1);
+}
+
+Result FuncParamAST::DumpKoopa() const {
+    koopa_ofs << "%" << this->ident;
+    this->type->DumpKoopa();
+    func_params_to_print += "  @" + this->ident + "_" + std::to_string(BlockCount + 1) + " = alloc i32\n";
+    func_params_to_print += "  store %" + this->ident + ", @" + this->ident + "_" + std::to_string(BlockCount + 1) + "\n";
+    func_params_to_map.push_back(std::make_pair(this->ident, Var));
     return Result();
 }
 
@@ -43,7 +82,13 @@ Result BlockAST::DumpKoopa() const {
         return Result();
     BlockID[++BlockDepth] = ++BlockCount;
     Map[BlockDepth].clear();
-    for (auto &ptr: this->block_item) {
+    koopa_ofs << func_params_to_print;
+    func_params_to_print = "";
+    for (auto &ptr: func_params_to_map) {
+        Map[BlockDepth][ptr.first] = ptr.second;
+    }
+    func_params_to_map.clear();
+    for (auto &ptr: this->block_items) {
         ptr->DumpKoopa();
     }
     --BlockDepth;
@@ -51,21 +96,17 @@ Result BlockAST::DumpKoopa() const {
 }
 
 Result ConstDeclAST::DumpKoopa() const {
-    for (auto &ptr: this->const_def) {
+    for (auto &ptr: this->const_defs) {
         ptr->DumpKoopa();
     }
-    return Result();        
+    return Result();    
 }
 
 Result VarDeclAST::DumpKoopa() const {
-    for (auto &ptr: this->var_def) {
+    for (auto &ptr: this->var_defs) {
         ptr->DumpKoopa();
     }
     return Result();
-}
-
-Result BTypeAST::DumpKoopa() const {
-    return Result();        
 }
 
 Result ConstDefAST::DumpKoopa() const {
@@ -78,10 +119,23 @@ Result ConstDefAST::DumpKoopa() const {
 
 Result VarDefAST::DumpKoopa() const {
     assert(Map[BlockDepth].find(this->ident) == Map[BlockDepth].end()); // undefined identifier
-    koopa_inst("@", this->ident, "_", BlockID[BlockDepth], " = alloc i32");
-    if (this->init_val != nullptr) {
-        Result res = this->init_val->DumpKoopa();
-        koopa_inst("store ", res, ", @", this->ident, "_", BlockID[BlockDepth]);
+    if (BlockDepth == 0) {
+        // global variable
+        int initialier = 0;
+        if (this->init_val != nullptr) {
+            Result res = this->init_val->DumpKoopa();
+            assert(res.which == Result::ResultEnum::imm);
+            initialier = res.val;
+        }
+        koopa_inst("global @", this->ident, "_", BlockID[BlockDepth], " = alloc i32, ", initialier);
+    }
+    else {
+        // local variable
+        koopa_inst("@", this->ident, "_", BlockID[BlockDepth], " = alloc i32");
+        if (this->init_val != nullptr) {
+            Result res = this->init_val->DumpKoopa();
+            koopa_inst("store ", res, ", @", this->ident, "_", BlockID[BlockDepth]);
+        }
     }
     Map[BlockDepth][this->ident] = Var;
     return Result();
@@ -169,10 +223,10 @@ Result StmtAST::DumpKoopa() const {
 
 Result LValAST::DumpKoopa() const  {
     for (int d = BlockDepth; d >= 0; --d) {
-        auto it = Map[d].find(this->ident);
+        auto it = Map[d].find(this->ident);        
         if (it != Map[d].end()) {
             if (it->second.which == Value::ValueEnum::const_) {
-                return Imm(it->second.val);
+                return Imm(it->second.const_val);
             }
             else {
                 Result res = Reg(RegCount++);
@@ -330,6 +384,34 @@ Result UnaryExpAST::DumpKoopa() const {
     }
     if (this->which == UnaryExpAST::UnaryExpEnum::pos) {
         return this->unary_exp->DumpKoopa();
+    }
+    if (this->which == UnaryExpAST::UnaryExpEnum::func_call) {
+        assert(!BasicBlockEnds);
+        std::vector<Result> ress;
+        for (auto &ptr: this->call_params) {
+            ress.push_back(ptr->DumpKoopa());
+        }
+        if (Map[0][this->ident].which == Value::ValueEnum::func_int) {
+            Result res = Reg(RegCount++);
+            koopa_ofs << "  " << res << " = call @" << this->ident << "(";
+            for (auto it = ress.begin(); it != ress.end(); ++it) {
+                if (it != ress.begin())
+                    koopa_ofs << ", ";
+                koopa_ofs << *it;
+            }
+            koopa_ofs << ")\n";
+            return res;
+        }
+        else {
+            koopa_ofs << "call @" << this->ident << "(";
+            for (auto it = ress.begin(); it != ress.end(); ++it) {
+                if (it != ress.begin())
+                    koopa_ofs << ", ";
+                koopa_ofs << *it;
+            }
+            koopa_ofs << ")\n";
+            return Result();
+        }
     }
     Result s = this->unary_exp->DumpKoopa();
     if (this->which == UnaryExpAST::UnaryExpEnum::neg) {

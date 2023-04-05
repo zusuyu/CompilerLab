@@ -2,6 +2,7 @@
   #include <memory>
   #include <string>
   #include "ast.hpp"
+  #include "util.hpp"
 }
 
 %{
@@ -11,6 +12,7 @@
 #include <string>
 
 #include "ast.hpp"
+#include "util.hpp"
 
 // 声明 lexer 函数和错误处理函数
 int yylex();
@@ -38,54 +40,107 @@ using namespace std;
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
 
-%token INT RETURN CONST IF ELSE WHILE BREAK CONTINUE
+%token INT VOID RETURN CONST IF ELSE WHILE BREAK CONTINUE
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block 
-                BlockItem BType 
+%type <ast_val> CompUnit FuncDef Type FuncParam Block BlockItem 
                 ConstDecl ConstDef ConstInitVal ConstExp 
                 VarDecl VarDef InitVal
-                Stmt MatchedStmt OpenStmt LVal
+                Stmt LVal
                 Exp UnaryExp PrimaryExp MulExp AddExp RelExp EqExp LogicalAndExp LogicalOrExp
 %type <int_val> Number
-%type <vec_val> MoreBlockItem MoreConstDef MoreVarDef
+%type <vec_val> MoreCompUnits MoreFuncParams MoreBlockItems MoreConstDefs MoreVarDefs MoreCallParams
 
 %%
 
+Program:
+  MoreCompUnits CompUnit {
+    auto ast_ = make_unique<ProgramAST>();
+    ($1)->push_back(unique_ptr<BaseAST>($2));
+    ast_->comp_units = std::move(*($1));
+    ast = std::move(ast_);
+  };
+
+MoreCompUnits:
+  MoreCompUnits CompUnit {
+    ($1)->push_back(unique_ptr<BaseAST>($2));
+    $$ = $1;
+  } | 
+  %empty {
+    $$ = new vector<unique_ptr<BaseAST>>();
+  };
+
 CompUnit:
   FuncDef {
-    auto comp_unit = make_unique<CompUnitAST>();
-    comp_unit->func_def = unique_ptr<BaseAST>($1);
-    ast = move(comp_unit);
+    $$ = $1;
+  } |
+  ConstDecl {
+    $$ = $1;
+  } | 
+  VarDecl {
+    $$ = $1;
   };
 
 FuncDef: 
-  FuncType IDENT '(' ')' Block {
+  Type IDENT '(' FuncParam MoreFuncParams ')' Block {
     auto ast = new FuncDefAST();
     ast->func_type = unique_ptr<BaseAST>($1);
     ast->ident = *unique_ptr<string>($2);
+    ($5)->insert(($5)->begin(), unique_ptr<BaseAST>($4));
+    ast->func_params = std::move(*($5));
+    ast->block = unique_ptr<BaseAST>($7);
+    $$ = ast;
+  } |
+  Type IDENT '(' ')' Block {
+    auto ast = new FuncDefAST();
+    ast->func_type = unique_ptr<BaseAST>($1);
+    ast->ident = *unique_ptr<string>($2);
+    ast->func_params = std::move(*(new vector<unique_ptr<BaseAST>>()));
     ast->block = unique_ptr<BaseAST>($5);
     $$ = ast;
   };
 
-FuncType:
+
+Type:
   INT {
-    auto ast = new FuncTypeAST();
-    ast->type = "i32";
+    auto ast = new TypeAST();
+    ast->type = ": i32";
+    $$ = ast;
+  } |
+  VOID {
+    auto ast = new TypeAST();
+    ast->type = "";
+    $$ = ast;
+  };
+
+MoreFuncParams:
+  MoreFuncParams ',' FuncParam {
+    ($1)->push_back(unique_ptr<BaseAST>($3));
+    $$ = $1;
+  } | 
+  %empty {
+    $$ = new vector<unique_ptr<BaseAST>>();
+  };
+
+FuncParam:
+  Type IDENT {
+    auto ast = new FuncParamAST();
+    ast->type = unique_ptr<BaseAST>($1);
+    ast->ident = *unique_ptr<string>($2);
     $$ = ast;
   };
 
 Block:
- '{' MoreBlockItem '}' {
+ '{' MoreBlockItems '}' {
     auto ast = new BlockAST();
-    ast->block_item = std::move(*($2));
+    ast->block_items = std::move(*($2));
     $$ = ast;
   };
 
-MoreBlockItem:
-  MoreBlockItem BlockItem {
+MoreBlockItems:
+  MoreBlockItems BlockItem {
     ($1)->push_back(unique_ptr<BaseAST>($2));
     $$ = $1;
   } | 
@@ -105,30 +160,23 @@ BlockItem:
   };
 
 ConstDecl:
-  CONST BType ConstDef MoreConstDef ';' {
+  CONST Type ConstDef MoreConstDefs ';' {
     auto ast = new ConstDeclAST();
     ($4)->insert(($4)->begin(), unique_ptr<BaseAST>($3));
-    ast->const_def = std::move(*($4));
+    ast->const_defs = std::move(*($4));
     $$ = ast;
   };
 
 VarDecl:
-  BType VarDef MoreVarDef ';' {
+  Type VarDef MoreVarDefs ';' {
     auto ast = new VarDeclAST();
     ($3)->insert(($3)->begin(), unique_ptr<BaseAST>($2));
-    ast->var_def = std::move(*($3));
+    ast->var_defs = std::move(*($3));
     $$ = ast;
   };
 
-BType:
-  INT {
-    auto ast = new BTypeAST();
-    ast->type = "i32";
-    $$ = ast;
-  };
-
-MoreConstDef:
-  MoreConstDef ',' ConstDef {
+MoreConstDefs:
+  MoreConstDefs ',' ConstDef {
     ($1)->push_back(unique_ptr<BaseAST>($3));
     $$ = $1;
   } | 
@@ -144,8 +192,8 @@ ConstDef:
     $$ = ast;
   };
 
-MoreVarDef:
-  MoreVarDef ',' VarDef {
+MoreVarDefs:
+  MoreVarDefs ',' VarDef {
     ($1)->push_back(unique_ptr<BaseAST>($3));
     $$ = $1;
   } | 
@@ -189,14 +237,6 @@ InitVal:
   };
 
 Stmt: 
-  MatchedStmt {
-    $$ = $1;
-  } | 
-  OpenStmt {
-    $$ = $1;
-  };
-
-MatchedStmt:
   LVal '=' Exp ';' {
     auto ast = new StmtAST();
     ast->which = StmtAST::StmtEnum::assign;
@@ -204,7 +244,15 @@ MatchedStmt:
     ast->exp = unique_ptr<BaseAST>($3);
     $$ = ast;
   } |
-  IF '(' Exp ')' MatchedStmt ELSE MatchedStmt {
+  IF '(' Exp ')' Stmt {
+    auto ast = new StmtAST();
+    ast->which = StmtAST::StmtEnum::if_;
+    ast->exp = unique_ptr<BaseAST>($3);
+    ast->then_stmt = unique_ptr<BaseAST>($5);
+    ast->else_stmt = nullptr;
+    $$ = ast;
+  } |
+  IF '(' Exp ')' Stmt ELSE Stmt {
     auto ast = new StmtAST();
     ast->which = StmtAST::StmtEnum::if_;
     ast->exp = unique_ptr<BaseAST>($3);
@@ -258,25 +306,6 @@ MatchedStmt:
     ast->which = StmtAST::StmtEnum::empty;
     $$ = ast;
   };
-
-OpenStmt:
-  IF '(' Exp ')' Stmt {
-    auto ast = new StmtAST();
-    ast->which = StmtAST::StmtEnum::if_;
-    ast->exp = unique_ptr<BaseAST>($3);
-    ast->then_stmt = unique_ptr<BaseAST>($5);
-    ast->else_stmt = nullptr;
-    $$ = ast;
-  } | 
-  IF '(' Exp ')' MatchedStmt ELSE OpenStmt {
-    auto ast = new StmtAST();
-    ast->which = StmtAST::StmtEnum::if_;
-    ast->exp = unique_ptr<BaseAST>($3);
-    ast->then_stmt = unique_ptr<BaseAST>($5);
-    ast->else_stmt = unique_ptr<BaseAST>($7);
-    $$ = ast;
-  };
-
 
 LVal:
   IDENT {
@@ -456,6 +485,30 @@ UnaryExp:
     ast->which = UnaryExpAST::UnaryExpEnum::logical_neg;
     ast->unary_exp = unique_ptr<BaseAST>($2);
     $$ = ast;
+  } |
+  IDENT '(' Exp MoreCallParams ')' {
+    auto ast = new UnaryExpAST();
+    ast->which = UnaryExpAST::UnaryExpEnum::func_call;
+    ast->ident = *unique_ptr<string>($1);
+    ($4)->insert(($4)->begin(), unique_ptr<BaseAST>($3));
+    ast->call_params = std::move(*($4));
+    $$ = ast;
+  } |
+  IDENT '(' ')' {
+    auto ast = new UnaryExpAST();
+    ast->which = UnaryExpAST::UnaryExpEnum::func_call;
+    ast->ident = *unique_ptr<string>($1);
+    ast->call_params = std::move(*(new vector<unique_ptr<BaseAST>>()));
+    $$ = ast;
+  }
+
+MoreCallParams:
+  MoreCallParams ',' Exp {
+    ($1)->push_back(unique_ptr<BaseAST>($3));
+    $$ = $1;
+  } | 
+  %empty {
+    $$ = new vector<unique_ptr<BaseAST>>();
   };
 
 PrimaryExp:
@@ -491,10 +544,8 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s) {
   
     extern int yylineno;    // defined and maintained in lex
     extern char *yytext;    // defined and maintained in lex
-    int len = strlen(yytext);
-    char buf[512] = {0};
-    for (int i = 0; i < len; ++i) {
-        sprintf(buf, "%s%d ", buf, yytext[i]);
-    }
-    fprintf(stderr, "ERROR: %s at symbol '%s' on line %d\n", s, buf, yylineno);
+    fprintf(stderr, "ERROR: %s at symbol '%c' on line %d\n", s, yytext[0], yylineno);    
+    for (int i = 0; i < 20; ++i)
+      fprintf(stderr, "%c", yytext[i]);
+    fprintf(stderr, "\n");
 }
