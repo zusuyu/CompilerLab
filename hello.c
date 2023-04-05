@@ -1,4 +1,11 @@
-int x = 1, y;
+int a = 1;
+int b = 2;
+
+void f() {
+  a = b;
+}
+
 int main() {
-  return x + y + 233;
+  f();
+  return a;
 }

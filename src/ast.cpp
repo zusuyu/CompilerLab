@@ -29,7 +29,7 @@ Result ProgramAST::DumpKoopa() const {
     koopa_ofs << "decl @putch(i32)\n";
     koopa_ofs << "decl @putarray(i32, *i32)\n";
     koopa_ofs << "decl @starttime()\n";
-    koopa_ofs << "decl @stoptime()\n";
+    koopa_ofs << "decl @stoptime()\n\n";
     Map[0]["getint"] = Map[0]["getch"] = Map[0]["getarray"] = FuncInt;
     Map[0]["putint"] = Map[0]["putch"] = Map[0]["Putarray"] = Map[0]["starttime"] = Map[0]["stoptime"] = FuncVoid;
 
@@ -52,7 +52,7 @@ Result FuncDefAST::DumpKoopa() const {
     else
         Map[0][this->ident] = FuncInt;
     koopa_ofs << " {\n";
-    koopa_basic_block("entry");
+    koopa_basic_block("entry_" + this->ident);
     this->block->DumpKoopa();
     if (!BasicBlockEnds) {
         // add a "ret" instruction for unreturned void function
@@ -127,7 +127,7 @@ Result VarDefAST::DumpKoopa() const {
             assert(res.which == Result::ResultEnum::imm);
             initialier = res.val;
         }
-        koopa_inst("global @", this->ident, "_", BlockID[BlockDepth], " = alloc i32, ", initialier);
+        koopa_ofs << "global @" << this->ident << "_" << BlockID[BlockDepth] << " = alloc i32, " << initialier << "\n\n";
     }
     else {
         // local variable
@@ -403,7 +403,7 @@ Result UnaryExpAST::DumpKoopa() const {
             return res;
         }
         else {
-            koopa_ofs << "call @" << this->ident << "(";
+            koopa_ofs << "  call @" << this->ident << "(";
             for (auto it = ress.begin(); it != ress.end(); ++it) {
                 if (it != ress.begin())
                     koopa_ofs << ", ";
