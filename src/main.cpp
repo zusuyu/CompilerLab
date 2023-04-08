@@ -5,11 +5,10 @@
 #include "koopa.h"
 
 extern FILE *yyin;
-extern int yyparse(std::unique_ptr<BaseAST> &ast);
+extern int yyparse(std::unique_ptr<ProgramAST> &ast);
 
 std::ofstream koopa_ofs;
 std::ofstream riscv_ofs;
-static char koopaIR[1 << 20];
 
 void help() {
     std::cout << "usage: ./compiler -koopa input_file -o output_file" << std::endl
@@ -33,9 +32,10 @@ int main(int argc, const char *argv[]) {
         return 0;
     }
 
-    std::unique_ptr<BaseAST> ast;
+    std::unique_ptr<ProgramAST> ast;
     if (yyparse(ast)) {
         std::cout << "Error: failed to parse " << std::endl;
+        return 0;
     }
 
     if (strcmp(mode, "-koopa") == 0) {
@@ -48,9 +48,11 @@ int main(int argc, const char *argv[]) {
         ast->DumpKoopa();
         koopa_ofs.close();
         std::ifstream koopa_ifs("IgnoreMe.koopa");
+        char *koopaIR = new char [1 << 20];
         koopa_ifs.read(koopaIR, 1 << 20);
         riscv_ofs = std::ofstream(output);
         parse_koopa(koopaIR);
+        delete [] koopaIR;
     }
     else {
         help();

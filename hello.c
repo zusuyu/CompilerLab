@@ -1,11 +1,4 @@
-int a = 1;
-int b = 2;
-
-void f() {
-  a = b;
-}
-
+int arr[2][2][2] = {{}, 1, {}};
 int main() {
-  f();
-  return a;
+  return 114514;
 }

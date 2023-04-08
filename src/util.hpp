@@ -16,19 +16,22 @@ public:
 
 class Value {
 public:
-    enum class ValueEnum {const_, var_, func_int, func_void} which;
+    enum class ValueEnum {const_, var_, pointer_, func_int, func_void} which;
     int const_val;
     Value();
     Value(ValueEnum which_, int const_val_);
 };
 
 #define Const(v) (Value(Value::ValueEnum::const_, (v)))
-#define Var (Value(Value::ValueEnum::var_, 0))
-#define FuncInt (Value(Value::ValueEnum::func_int, 0))
+#define Var      (Value(Value::ValueEnum::var_, 0))
+#define Pointer  (Value(Value::ValueEnum::pointer_, 0))
+#define FuncInt  (Value(Value::ValueEnum::func_int, 0))
 #define FuncVoid (Value(Value::ValueEnum::func_void, 0))
 
 extern std::ofstream koopa_ofs;
 extern bool BasicBlockEnds;
+
+#define WRAP(ident, sub) ((ident) + "_" + std::to_string(sub))
 
 template<typename T>
 void koopa_print(T arg) {
@@ -45,6 +48,8 @@ void koopa_inst(Ts... args) {
         koopa_print("  ", args...);
 }
 void koopa_basic_block(std::string label);
+void koopa_array_type(int *len, int k);
+void koopa_aggregate(int *len, int k, Result *buffer);
 void koopa_ret(Result res);
 void koopa_ret();
 

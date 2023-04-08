@@ -2,7 +2,10 @@
 
 #include "util.hpp"
 
-Result::Result() {}
+Result::Result() {
+    which = ResultEnum::imm;
+    val = 0;
+}
 Result::Result(ResultEnum which_, int val_) {
     which = which_;
     val = val_;
@@ -14,7 +17,10 @@ std::ostream & operator << (std::ostream &ofs, Result res) {
     return ofs;
 }
 
-Value::Value() {}
+Value::Value() {
+    which = ValueEnum::const_;
+    const_val = 0;
+}
 Value::Value(ValueEnum which_, int const_val_) {
     which = which_;
     const_val = const_val_;
@@ -27,6 +33,33 @@ extern bool BasicBlockEnds;
 void koopa_basic_block(std::string label) {
     koopa_print("\n%", label, ":");
     BasicBlockEnds = false;
+}
+void koopa_array_type(int *len, int k) {
+    if (k > 0) {
+        koopa_ofs << "[";
+        koopa_array_type(len + 1, k - 1);
+        koopa_ofs << ", " << len[0] << "]";
+    }
+    else {
+        koopa_ofs << "i32";
+    }
+}
+void koopa_aggregate(int *len, int k, Result *buffer){
+    if (k == 0) {
+        koopa_ofs << buffer->val;
+    }
+    else {
+        int tot = 1; // size of subarray
+        for (int i = 1; i < k; ++i)
+            tot *= len[i];
+        koopa_ofs << "{";
+        for (int i = 0; i < len[0]; ++i) {
+            if (i > 0)
+                koopa_ofs << ", ";
+            koopa_aggregate(len + 1, k - 1, buffer + i * tot);
+        }
+        koopa_ofs << "}";
+    }
 }
 void koopa_ret(Result res) {
     if (!BasicBlockEnds)
