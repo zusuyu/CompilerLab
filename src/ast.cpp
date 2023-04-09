@@ -4,7 +4,7 @@
 #include "util.hpp"
 
 extern std::ofstream koopa_ofs;
-std::unordered_map<std::string, Value> Map[1024]; // symbol table for different depth
+std::unordered_map<std::string, DataType> Map[1024]; // symbol table for different depth
 int BlockID[1024];
 int WhileID[1024];
 int RegCount = 0;
@@ -16,9 +16,6 @@ bool BasicBlockEnds = false;
 int ArraySize;
 int ArrayDimension[1024];
 
-
-std::string func_params_to_print;
-std::vector<std::pair<std::string, Value>> func_params_to_map;
 
 void ProgramAST::DumpKoopa() const {
     /* lib_funcs */
@@ -52,10 +49,10 @@ void FuncDefAST::DumpKoopa() const {
         Map[0][this->ident] = FuncInt;
     koopa_ofs << " {\n";
     koopa_basic_block("entry_" + this->ident);
-    this->block->DumpKoopa();
+    this->block->DumpKoopa(this->func_params);
     if (!BasicBlockEnds) {
         // add a "ret" instruction for unreturned void function
-        assert(Map[0][this->ident].which == Value::ValueEnum::func_void);
+        assert(Map[0][this->ident].which == DataType::DataTypeEnum::func_void);
         koopa_ret();
     }
     koopa_ofs << "\n}\n\n";
@@ -66,25 +63,48 @@ int TypeAST::DumpKoopa() const {
     return this->type == "" ? 0 : 1;
 }
 
-void FuncParamAST::DumpKoopa() const {
-    koopa_ofs << "%" << this->ident;
-    this->type->DumpKoopa();
-    func_params_to_print += "  @" + WRAP(this->ident, BlockCount + 1) + " = alloc i32\n";
-    func_params_to_print += "  store %" + this->ident + ", @" + WRAP(this->ident, BlockCount + 1) + "\n";
-    func_params_to_map.push_back(std::make_pair(this->ident, Var));
+void koopa_param_array_type(const std::vector<std::unique_ptr<ExpAST>> &subscripts) {
+    int k = subscripts.size();
+    int *len = new int [k - 1];
+    // subscripts[0] == nullptr
+    for (int i = 1; i < k; ++i) {
+        Result res = subscripts[i]->DumpKoopa();
+        assert(res.which == Result::ResultEnum::imm);
+        len[i - 1] = res.val;
+    }
+    koopa_array_type(len, k - 1);    
+    delete [] len;
 }
 
-void BlockAST::DumpKoopa() const {
+void FuncParamAST::DumpKoopa() const {
+    if (this->subscripts.size() == 0) {
+        koopa_ofs << "%" << WRAP(this->ident, BlockCount + 1) << ": i32";
+    }
+    else {
+        koopa_ofs << "%" << WRAP(this->ident, BlockCount + 1) << ": *";
+        koopa_param_array_type(this->subscripts);
+    }
+}
+
+void BlockAST::DumpKoopa(const std::vector<std::unique_ptr<FuncParamAST>> &func_params) const {
     if (BasicBlockEnds)
         return;
     BlockID[++BlockDepth] = ++BlockCount;
     Map[BlockDepth].clear();
-    koopa_ofs << func_params_to_print;
-    func_params_to_print = "";
-    for (auto &ptr: func_params_to_map) {
-        Map[BlockDepth][ptr.first] = ptr.second;
+    for (auto &ptr: func_params) {
+        if (ptr->subscripts.size() == 0) {
+            koopa_inst("@", WRAP(ptr->ident, BlockCount), " = alloc i32\n");
+            koopa_inst("store %", WRAP(ptr->ident, BlockCount), ", @", WRAP(ptr->ident, BlockCount));
+            Map[BlockDepth][ptr->ident] = Var;
+        }
+        else {
+            koopa_ofs << "  @" << WRAP(ptr->ident, BlockCount) << " = alloc *";
+            koopa_param_array_type(ptr->subscripts);
+            koopa_ofs << "\n";
+            koopa_inst("store %", WRAP(ptr->ident, BlockCount), ", @", WRAP(ptr->ident, BlockCount));
+            Map[BlockDepth][ptr->ident] = ParamPointer(ptr->subscripts.size());
+        }
     }
-    func_params_to_map.clear();
     for (auto &ptr: this->block_items) {
         ptr->DumpKoopa();
     }
@@ -135,7 +155,7 @@ void DumpKoopa_Array(const std::string &ident, const std::vector<std::unique_ptr
         koopa_aggregate(len, k, buffer);
         koopa_ofs << ", @" << WRAP(ident, BlockID[BlockDepth]) << "\n";
     }
-    Map[BlockDepth][ident] = Pointer;
+    Map[BlockDepth][ident] = Pointer(k);
     delete [] buffer;
     delete [] len;    
 }
@@ -282,31 +302,27 @@ Result LValAST::DumpKoopa() const  {
     for (int d = BlockDepth; d >= 0; --d) {
         auto it = Map[d].find(this->ident);
         if (it != Map[d].end()) {
-            if (it->second.which == Value::ValueEnum::const_) {
-                return Imm(it->second.const_val);
+            if (it->second.which == DataType::DataTypeEnum::const_) {
+                // constant
+                return Imm(it->second.val);
             }
-            else if (it->second.which == Value::ValueEnum::var_) {
+            else if (it->second.which == DataType::DataTypeEnum::var_) {
+                // variable
                 Result res = Reg(RegCount++);
                 koopa_inst(res, " = load @", WRAP(this->ident, BlockID[d]));
                 return res;
             }
             else {
+                assert(it->second.which == DataType::DataTypeEnum::pointer_
+                       || it->second.which == DataType::DataTypeEnum::param_pointer_);
                 // pointer
-                assert(it->second.which == Value::ValueEnum::pointer_);
-                assert(this->subscripts.size() > 0);
-                Result ptr;
-                for (int i = 0; i < this->subscripts.size(); ++i) {
-                    Result sub = this->subscripts[i]->DumpKoopa();
-                    Result new_ptr = Reg(RegCount++);
-                    if (i == 0)
-                        koopa_inst(new_ptr, " = getelemptr @", WRAP(this->ident, BlockID[d]), ", ", sub);
-                    else
-                        koopa_inst(new_ptr, " = getelemptr ", ptr, ", ", sub);
-                    ptr = new_ptr;
+                // notice that a array pointer can be partially dereferenced, so "<=" instead of "=="
+                assert(this->subscripts.size() <= it->second.val);
+                std::vector<Result> subs;
+                for (auto &ptr: this->subscripts) {
+                    subs.push_back(ptr->DumpKoopa());
                 }
-                Result res = Reg(RegCount++);
-                koopa_inst(res, " = load ", ptr);
-                return res;
+                return koopa_dereference(WRAP(this->ident, BlockID[d]), subs, it->second);                
             }
         }
     }
@@ -317,20 +333,30 @@ void LValAST::StoreValue(Result res) const {
     for (int d = BlockDepth; d >= 0; --d) {
         auto it = Map[d].find(this->ident);
         if (it != Map[d].end()) {
-            if (it->second.which == Value::ValueEnum::var_) {
+            if (it->second.which == DataType::DataTypeEnum::var_) {
                 koopa_inst("store ", res, ", @", WRAP(this->ident, BlockID[d]));
             }
             else {
-                assert(it->second.which == Value::ValueEnum::pointer_);
-                assert(this->subscripts.size() > 0);
+                assert(it->second.which == DataType::DataTypeEnum::pointer_
+                       || it->second.which == DataType::DataTypeEnum::param_pointer_);
+                assert(this->subscripts.size() == it->second.val);
                 Result ptr;
                 for (int i = 0; i < this->subscripts.size(); ++i) {
                     Result sub = this->subscripts[i]->DumpKoopa();
                     Result new_ptr = Reg(RegCount++);
-                    if (i == 0)
-                        koopa_inst(new_ptr, " = getelemptr @", WRAP(this->ident, BlockID[d]), ", ", sub);
-                    else
+                    if (i == 0) {
+                        if (it->second.which == DataType::DataTypeEnum::pointer_) {
+                            koopa_inst(new_ptr, " = getelemptr @", WRAP(this->ident, BlockID[d]), ", ", sub);
+                        }
+                        else {
+                            Result tmp = Reg(RegCount++);
+                            koopa_inst(tmp, " = load @", WRAP(this->ident, BlockID[d]));
+                            koopa_inst(new_ptr, " = getptr ", tmp, ", ", sub);
+                        }
+                    }
+                    else {
                         koopa_inst(new_ptr, " = getelemptr ", ptr, ", ", sub);
+                    }
                     ptr = new_ptr;
                 }
                 koopa_inst("store ", res, ", ", ptr);
@@ -480,15 +506,15 @@ Result UnaryExpAST::DumpKoopa() const {
     }
     if (this->which == UnaryExpAST::UnaryExpEnum::func_call) {
         assert(!BasicBlockEnds);
-        std::vector<Result> ress;
+        std::vector<Result> params;
         for (auto &ptr: this->call_params) {
-            ress.push_back(ptr->DumpKoopa());
+            params.push_back(ptr->DumpKoopa());
         }
-        if (Map[0][this->ident].which == Value::ValueEnum::func_int) {
+        if (Map[0][this->ident].which == DataType::DataTypeEnum::func_int) {
             Result res = Reg(RegCount++);
             koopa_ofs << "  " << res << " = call @" << this->ident << "(";
-            for (auto it = ress.begin(); it != ress.end(); ++it) {
-                if (it != ress.begin())
+            for (auto it = params.begin(); it != params.end(); ++it) {
+                if (it != params.begin())
                     koopa_ofs << ", ";
                 koopa_ofs << *it;
             }
@@ -497,8 +523,8 @@ Result UnaryExpAST::DumpKoopa() const {
         }
         else {
             koopa_ofs << "  call @" << this->ident << "(";
-            for (auto it = ress.begin(); it != ress.end(); ++it) {
-                if (it != ress.begin())
+            for (auto it = params.begin(); it != params.end(); ++it) {
+                if (it != params.begin())
                     koopa_ofs << ", ";
                 koopa_ofs << *it;
             }

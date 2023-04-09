@@ -164,8 +164,15 @@ MoreFuncParams:
 FuncParam:
   Type IDENT {
     auto ast = new FuncParamAST();
-    ast->type = unique_ptr<TypeAST>($1);
     ast->ident = *unique_ptr<string>($2);
+    ast->subscripts = vector<unique_ptr<ExpAST>>();
+    $$ = ast;
+  } |
+  Type IDENT '[' ']' MoreSubscripts {
+    auto ast = new FuncParamAST();
+    ast->ident = *unique_ptr<string>($2);
+    ($5)->insert(($5)->begin(), nullptr);
+    ast->subscripts = std::move(*($5));
     $$ = ast;
   };
 

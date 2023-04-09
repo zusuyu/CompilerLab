@@ -1,5 +1,6 @@
 #include <bits/stdc++.h>
 
+#include "ast.hpp"
 #include "util.hpp"
 
 Result::Result() {
@@ -17,13 +18,13 @@ std::ostream & operator << (std::ostream &ofs, Result res) {
     return ofs;
 }
 
-Value::Value() {
-    which = ValueEnum::const_;
-    const_val = 0;
+DataType::DataType() {
+    which = DataTypeEnum::const_;
+    val = 0;
 }
-Value::Value(ValueEnum which_, int const_val_) {
+DataType::DataType(DataTypeEnum which_, int val_) {
     which = which_;
-    const_val = const_val_;
+    val = val_;
 }
 
 extern std::ofstream koopa_ofs;
@@ -60,6 +61,57 @@ void koopa_aggregate(int *len, int k, Result *buffer){
         }
         koopa_ofs << "}";
     }
+}
+/* 
+ * dereference a pointer ident on subs
+ *     ident is a (ty.val + 1)-level pointer, and subs.size() <= ty.val
+ *     notice that there is a 1-level dereference by default
+ *     
+ *     when ty.which == pointer_, ident is something like *[...]
+ *     but when ty.which == param_pointer_, it is like **[...]
+ *     
+ *     so in the later case, we use "getptr" instead of "getelemptr" in the first round of dereference
+ * 
+ *     in the last round of dereference, use "load %ptr" instead of "getelemptr %ptr, 0" for i32
+ */
+Result koopa_dereference(std::string ident, std::vector<Result> &subs, DataType ty) {
+    Result ptr;
+    for (int i = 0; i < subs.size(); ++i) {
+        Result new_ptr = Reg(RegCount++);
+        if (i == 0) {
+            if (ty.which == DataType::DataTypeEnum::pointer_) {
+                koopa_inst(new_ptr, " = getelemptr @", ident, ", ", subs[i]);
+            }
+            else {
+                Result tmp = Reg(RegCount++);
+                koopa_inst(tmp, " = load @", ident);
+                koopa_inst(new_ptr, " = getptr ", tmp, ", ", subs[i]);
+            }
+        }
+        else
+            koopa_inst(new_ptr, " = getelemptr ", ptr, ", ", subs[i]);
+        ptr = new_ptr;
+    }
+    Result res = Reg(RegCount++);
+    if (subs.size() == ty.val) {
+        // completely dereferenced
+        koopa_inst(res, " = load ", ptr);
+    }
+    else {
+        // partially dereferenced
+        if (subs.size() == 0) {
+            if (ty.which == DataType::DataTypeEnum::pointer_)
+                koopa_inst(res, " = getelemptr @", ident, ", 0");
+            else {
+                Result tmp = Reg(RegCount++);
+                koopa_inst(tmp, " = load @", ident);
+                koopa_inst(res, " = getptr ", tmp, ", 0");
+            }
+        }
+        else
+            koopa_inst(res, " = getelemptr ", ptr, ", 0");
+    }
+    return res;
 }
 void koopa_ret(Result res) {
     if (!BasicBlockEnds)

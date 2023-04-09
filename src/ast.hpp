@@ -55,15 +55,16 @@ public:
 };
 class FuncParamAST {
 public:
+    // type must be i32
     std::string ident;
-    std::unique_ptr<TypeAST> type;
+    std::vector<std::unique_ptr<ExpAST>> subscripts;
     void DumpKoopa() const;
 };
 class BlockAST {
 public:
     // Stmt, ConstDecl and VarDecl
     std::vector<std::unique_ptr<BaseAST>> block_items;
-    void DumpKoopa() const;
+    void DumpKoopa(const std::vector<std::unique_ptr<FuncParamAST>> &func_params = std::vector<std::unique_ptr<FuncParamAST>>()) const;
 };
 class ConstDeclAST : public BaseAST {
 public:
@@ -80,14 +81,14 @@ public:
 class ConstDefAST {
 public:
     std::string ident;
-    std::vector<std::unique_ptr<ExpAST>> subscripts; // const_exps
+    std::vector<std::unique_ptr<ExpAST>> subscripts;
     std::unique_ptr<InitValAST> init_val;
     void DumpKoopa() const;
 };
 class VarDefAST {
 public:
     std::string ident;
-    std::vector<std::unique_ptr<ExpAST>> subscripts; // const_exps
+    std::vector<std::unique_ptr<ExpAST>> subscripts;
     std::unique_ptr<InitValAST> init_val;
     void DumpKoopa() const;
 };
@@ -110,7 +111,7 @@ public:
 class LValAST {
 public:
     std::string ident;
-    std::vector<std::unique_ptr<ExpAST>> subscripts; // exps
+    std::vector<std::unique_ptr<ExpAST>> subscripts;
     Result DumpKoopa() const;
     void StoreValue(Result res) const;
 };
