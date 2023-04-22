@@ -410,7 +410,7 @@ Result LogicalAndExpAST::DumpKoopa() const {
         if (s1.val == 0)
             return Imm(0);
         else {
-            Result s2 = this->logical_and_exp->DumpKoopa();
+            Result s2 = this->eq_exp->DumpKoopa();
             return calc("ne", s2, Imm(0));
         }
     } else {
