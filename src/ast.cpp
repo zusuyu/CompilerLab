@@ -244,18 +244,18 @@ void StmtAST::DumpKoopa() const {
             koopa_inst("br ", res, ", %then", id, ", %else", id);
             koopa_basic_block("then" + std::to_string(id));
             this->then_stmt->DumpKoopa();
-            koopa_inst("jump %end", id);
+            koopa_inst("jump %if_end", id);
             koopa_basic_block("else" + std::to_string(id));
             this->else_stmt->DumpKoopa();
-            koopa_inst("jump %end", id);
-            koopa_basic_block("end" + std::to_string(id));
+            koopa_inst("jump %if_end", id);
+            koopa_basic_block("if_end" + std::to_string(id));
         }
         else {
-            koopa_inst("br ", res, ", %then", id, ", %end", id);
+            koopa_inst("br ", res, ", %then", id, ", %if_end", id);
             koopa_basic_block("then" + std::to_string(id));
             this->then_stmt->DumpKoopa();
-            koopa_inst("jump %end", id);
-            koopa_basic_block("end" + std::to_string(id));
+            koopa_inst("jump %if_end", id);
+            koopa_basic_block("if_end" + std::to_string(id));
         }
     }
     else if (this->which == StmtAST::StmtEnum::while_) {
