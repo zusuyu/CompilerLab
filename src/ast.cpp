@@ -12,7 +12,6 @@ int BlockDepth = 0;
 int BlockCount = 0;
 int BranchCount = 0;
 int WhileDepth = 0;
-bool BasicBlockEnds = false;
 int ArraySize;
 int ArrayDimension[1024];
 
@@ -48,12 +47,12 @@ void FuncDefAST::DumpKoopa() const {
     else
         Map[0][this->ident] = FuncInt;
     koopa_ofs << " {\n";
-    koopa_basic_block("entry_" + this->ident);
+    koopa_print("%entry_", this->ident, ":");
     this->block->DumpKoopa(this->func_params);
-    if (!BasicBlockEnds) {
-        // add a "ret" instruction for unreturned void function
-        assert(Map[0][this->ident].which == DataType::DataTypeEnum::func_void);
-        koopa_ret();
+    if (Map[0][this->ident].which == DataType::DataTypeEnum::func_void) {
+        koopa_ret(false);
+    } else {
+        koopa_ret(Imm(114514), false);
     }
     koopa_ofs << "\n}\n\n";
 }
@@ -72,7 +71,7 @@ void koopa_param_array_type(const std::vector<std::unique_ptr<ExpAST>> &subscrip
         assert(res.which == Result::ResultEnum::imm);
         len[i - 1] = res.val;
     }
-    koopa_array_type(len, k - 1);    
+    koopa_array_type(len, k - 1);
     delete [] len;
 }
 
@@ -87,8 +86,6 @@ void FuncParamAST::DumpKoopa() const {
 }
 
 void BlockAST::DumpKoopa(const std::vector<std::unique_ptr<FuncParamAST>> &func_params) const {
-    if (BasicBlockEnds)
-        return;
     BlockID[++BlockDepth] = ++BlockCount;
     Map[BlockDepth].clear();
     for (auto &ptr: func_params) {
@@ -232,63 +229,52 @@ void InitValAST::DumpKoopa(int *len, int k, Result *buffer) const {
 }
 
 void StmtAST::DumpKoopa() const {
-    if (BasicBlockEnds)
-        return;
     if (this->which == StmtAST::StmtEnum::assign) {
         this->lval->StoreValue(this->exp->DumpKoopa());
     }
     else if (this->which == StmtAST::StmtEnum::if_) {
-        Result res = this->exp->DumpKoopa();
-        int id = ++BranchCount;
+        Result cond = this->exp->DumpKoopa();
+        std::string id = std::to_string(++BranchCount);
         if (this->else_stmt != nullptr) {
-            koopa_inst("br ", res, ", %then", id, ", %else", id);
-            koopa_basic_block("then" + std::to_string(id));
+            koopa_br(cond, "%then" + id, "%else" + id, "%then" + id);
             this->then_stmt->DumpKoopa();
-            koopa_inst("jump %if_end", id);
-            koopa_basic_block("else" + std::to_string(id));
+            koopa_jump("%if_end" + id, "%else" + id);
             this->else_stmt->DumpKoopa();
-            koopa_inst("jump %if_end", id);
-            koopa_basic_block("if_end" + std::to_string(id));
+            koopa_jump("%if_end" + id, "%if_end" + id);
         }
         else {
-            koopa_inst("br ", res, ", %then", id, ", %if_end", id);
-            koopa_basic_block("then" + std::to_string(id));
+            koopa_br(cond, "%then" + id, "%if_end" + id, "%then" + id);
             this->then_stmt->DumpKoopa();
-            koopa_inst("jump %if_end", id);
-            koopa_basic_block("if_end" + std::to_string(id));
+            koopa_jump("%if_end" + id, "%if_end" + id);
         }
     }
     else if (this->which == StmtAST::StmtEnum::while_) {
-        int id = WhileID[++WhileDepth] = ++BranchCount;
-        koopa_inst("jump %while_entry", id);
-        koopa_basic_block("while_entry" + std::to_string(id));
-        Result res = this->exp->DumpKoopa();
-        koopa_inst("br ", res, ", %while_body", id, ", %while_end", id);
-        koopa_basic_block("while_body" + std::to_string(id));
+        std::string id = std::to_string(WhileID[++WhileDepth] = ++BranchCount);
+        koopa_jump("%while_entry" + id, "%while_entry" + id);
+        Result cond = this->exp->DumpKoopa();
+        koopa_br(cond, "%while_body" + id, "%while_end" + id, "%while_body" + id);
         this->then_stmt->DumpKoopa();
-        koopa_inst("jump %while_entry", id);
-        koopa_basic_block("while_end" + std::to_string(id));
+        koopa_jump("%while_entry" + id, "%while_end" + id);
         --WhileDepth;
     }
     else if (this->which == StmtAST::StmtEnum::break_) {
         assert(WhileDepth > 0);
-        koopa_inst("jump %while_end", WhileID[WhileDepth]);
-        koopa_basic_block("break" + std::to_string(++BranchCount));
+        static int BreakCount = 0;
+        koopa_jump("%while_end" + std::to_string(WhileID[WhileDepth]), "%break" + std::to_string(++BreakCount));
     }
     else if (this->which == StmtAST::StmtEnum::continue_) {
         assert(WhileDepth > 0);
-        koopa_inst("jump %while_entry", WhileID[WhileDepth]);
-        koopa_basic_block("continue" + std::to_string(++BranchCount));
+        static int ContinueCount = 0;
+        koopa_jump("%while_entry" + std::to_string(WhileID[WhileDepth]), "%continue" + std::to_string(++ContinueCount));
     }
     else if (this->which == StmtAST::StmtEnum::ret) {
         if (this->exp != nullptr) {
             Result res = this->exp->DumpKoopa();
-            koopa_ret(res);
+            koopa_ret(res, true);
         }
         else {
-            koopa_ret();
+            koopa_ret(true);
         }
-        BasicBlockEnds = true;
     }
     else if (this->which == StmtAST::StmtEnum::another_block) {
         this->block->DumpKoopa();
@@ -383,18 +369,15 @@ Result LogicalOrExpAST::DumpKoopa() const {
             return calc("ne", s2, Imm(0));
         }
     } else {
-        int id = ++BranchCount;
+        std::string id = std::to_string(++BranchCount);
         koopa_inst("@result", id, " = alloc i32");
-        koopa_inst("br ", s1, ", %then", id, ", %else", id);
-        koopa_basic_block("then" + std::to_string(id));
+        koopa_br(s1, "%then" + id, "%else" + id, "%then" + id);
         koopa_inst("store 1, @result", id);
-        koopa_inst("jump %end", id);
-        koopa_basic_block("else" + std::to_string(id));
+        koopa_jump("%end" + id, "%else" + id);
         Result s2 = this->logical_and_exp->DumpKoopa();
         s2 = calc("ne", s2, Imm(0));
         koopa_inst("store ", s2, ", @result", id);
-        koopa_inst("jump %end", id);
-        koopa_basic_block("end" + std::to_string(id));
+        koopa_jump("%end" + id, "%end" + id);
         Result res = Reg(RegCount++);
         koopa_inst(res, " = load @result", id);
         return res;
@@ -407,25 +390,22 @@ Result LogicalAndExpAST::DumpKoopa() const {
     }
     Result s1 = this->logical_and_exp->DumpKoopa();
     if (s1.which == Result::ResultEnum::imm) {
-        if (s1.val == 0)
+        if (s1.val == 0) {
             return Imm(0);
-        else {
+        } else {
             Result s2 = this->eq_exp->DumpKoopa();
             return calc("ne", s2, Imm(0));
         }
     } else {
-        int id = ++BranchCount;
+        std::string id = std::to_string(++BranchCount);
         koopa_inst("@result", id, " = alloc i32");
-        koopa_inst("br ", s1, ", %then", id, ", %else", id);
-        koopa_basic_block("then" + std::to_string(id));
+        koopa_br(s1, "%then" + id, "%else" + id, "%then" + id);
         Result s2 = this->eq_exp->DumpKoopa();
         s2 = calc("ne", s2, Imm(0));
         koopa_inst("store ", s2, ", @result", id);
-        koopa_inst("jump %end", id);
-        koopa_basic_block("else" + std::to_string(id));
+        koopa_jump("%end" + id, "%else" + id);
         koopa_inst("store 0, @result", id);
-        koopa_inst("jump %end", id);
-        koopa_basic_block("end" + std::to_string(id));
+        koopa_jump("%end" + id, "%end" + id);
         Result res = Reg(RegCount++);
         koopa_inst(res, " = load @result", id);
         return res;
@@ -440,8 +420,7 @@ Result EqExpAST::DumpKoopa() const {
     Result s2 = this->rel_exp->DumpKoopa();
     if (this->which == EqExpAST::EqExpEnum::eq) {
         return calc("eq", s1, s2);
-    }
-    else {
+    } else {
         return calc("ne", s1, s2);
     }
 }
@@ -454,14 +433,11 @@ Result RelExpAST::DumpKoopa() const {
     Result s2 = this->add_exp->DumpKoopa();
     if (this->which == RelExpAST::RelExpEnum::lt) {
         return calc("lt", s1, s2);
-    }
-    else if (this->which == RelExpAST::RelExpEnum::gt) {
+    } else if (this->which == RelExpAST::RelExpEnum::gt) {
         return calc("gt", s1, s2);
-    }
-    else if (this->which == RelExpAST::RelExpEnum::le) {
+    } else if (this->which == RelExpAST::RelExpEnum::le) {
         return calc("le", s1, s2);
-    }
-    else {
+    } else {
         return calc("ge", s1, s2);
     }
 }
@@ -474,8 +450,7 @@ Result AddExpAST::DumpKoopa() const {
     Result s2 = this->mul_exp->DumpKoopa();
     if (this->which == AddExpAST::AddExpEnum::add) {
         return calc("add", s1, s2);
-    }
-    else {
+    } else {
         return calc("sub", s1, s2);
     }
 }
@@ -488,8 +463,7 @@ Result MulExpAST::DumpKoopa() const {
     Result s2 = this->unary_exp->DumpKoopa();
     if (this->which == MulExpAST::MulExpEnum::mul) {
         return calc("mul", s1, s2);
-    }
-    else if (this->which == MulExpAST::MulExpEnum::div) {
+    } else if (this->which == MulExpAST::MulExpEnum::div) {
         return calc("div", s1, s2);
     }
     else {
@@ -505,7 +479,6 @@ Result UnaryExpAST::DumpKoopa() const {
         return this->unary_exp->DumpKoopa();
     }
     if (this->which == UnaryExpAST::UnaryExpEnum::func_call) {
-        assert(!BasicBlockEnds);
         std::vector<Result> params;
         for (auto &ptr: this->call_params) {
             params.push_back(ptr->DumpKoopa());
@@ -520,8 +493,7 @@ Result UnaryExpAST::DumpKoopa() const {
             }
             koopa_ofs << ")\n";
             return res;
-        }
-        else {
+        } else {
             koopa_ofs << "  call @" << this->ident << "(";
             for (auto it = params.begin(); it != params.end(); ++it) {
                 if (it != params.begin())
@@ -535,8 +507,7 @@ Result UnaryExpAST::DumpKoopa() const {
     Result s = this->unary_exp->DumpKoopa();
     if (this->which == UnaryExpAST::UnaryExpEnum::neg) {
         return calc("sub", Imm(0), s);
-    }
-    else { 
+    } else { 
         return calc("eq", Imm(0), s);
     }
 }
@@ -544,11 +515,9 @@ Result UnaryExpAST::DumpKoopa() const {
 Result PrimaryExpAST::DumpKoopa() const {
     if (this->which == PrimaryExpAST::PrimaryExpEnum::into_number) {
         return Imm(this->number);
-    }
-    else if (this->which == PrimaryExpAST::PrimaryExpEnum::into_lval){
+    } else if (this->which == PrimaryExpAST::PrimaryExpEnum::into_lval){
         return this->lval->DumpKoopa();
-    }
-    else {
+    } else {
         return this->exp->DumpKoopa();
     }
 }

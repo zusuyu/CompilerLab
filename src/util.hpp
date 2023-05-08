@@ -43,16 +43,18 @@ void koopa_print(T arg0, Ts... args) {
     koopa_ofs << arg0;
     koopa_print(args...);
 }
+/* not applicable to ret, br & jump */
 template<typename... Ts>
 void koopa_inst(Ts... args) {
-    if (!BasicBlockEnds)
-        koopa_print("  ", args...);
+    koopa_print("  ", args...);
 }
-void koopa_basic_block(std::string label);
+// void koopa_basic_block(std::string label);
 void koopa_array_type(int *len, int k);
 void koopa_aggregate(int *len, int k, Result *buffer);
 Result koopa_dereference(std::string ident, std::vector<Result> &subs, DataType ty);
-void koopa_ret(Result res);
-void koopa_ret();
+void koopa_br(Result cond, std::string label1, std::string label2, std::string next_label);
+void koopa_jump(std::string dst_label, std::string next_label);
+void koopa_ret(Result res, bool need_label);
+void koopa_ret(bool need_label);
 
 Result calc(std::string oprand, Result s1, Result s2);

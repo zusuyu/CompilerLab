@@ -29,12 +29,7 @@ DataType::DataType(DataTypeEnum which_, int val_) {
 
 extern std::ofstream koopa_ofs;
 extern int RegCount;
-extern bool BasicBlockEnds;
 
-void koopa_basic_block(std::string label) {
-    koopa_print("\n%", label, ":");
-    BasicBlockEnds = false;
-}
 void koopa_array_type(int *len, int k) {
     if (k > 0) {
         koopa_ofs << "[";
@@ -113,15 +108,24 @@ Result koopa_dereference(std::string ident, std::vector<Result> &subs, DataType 
     }
     return res;
 }
-void koopa_ret(Result res) {
-    if (!BasicBlockEnds)
-        koopa_print("  ret ", res);
-    BasicBlockEnds = true;
+void koopa_br(Result cond, std::string label1, std::string label2, std::string next_label) {
+    koopa_print("  br ", cond, ", ", label1, ", ", label2);
+    koopa_print(next_label, ":");
 }
-void koopa_ret() {
-    if (!BasicBlockEnds)
-        koopa_print("  ret");
-    BasicBlockEnds = true;
+void koopa_jump(std::string dst_label, std::string next_label) {
+    koopa_print("  jump ", dst_label);
+    koopa_print(next_label, ":");
+}
+int RetCount = 0;
+void koopa_ret(Result res, bool need_label) {
+    koopa_print("  ret ", res);
+    if (need_label)
+        koopa_print("%ret_label", ++RetCount, ":");
+}
+void koopa_ret(bool need_label) {
+    koopa_print("  ret");
+    if (need_label)
+        koopa_print("%ret_label", ++RetCount, ":");
 }
 
 Result calc(std::string op, Result s1, Result s2) {
