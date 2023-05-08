@@ -16,7 +16,7 @@ void help() {
 }
 
 int main(int argc, const char *argv[]) {
-
+    
     if (argc != 5) {
         help();
         return 0;
@@ -27,10 +27,17 @@ int main(int argc, const char *argv[]) {
     auto output = argv[4];
 
     if (false) {
+        int kase;
+        std::ifstream in("/root/compiler/testcases/id.txt");
+        in >> kase;
+        in.close();
+        std::ofstream out("/root/compiler/testcases/id.txt");
+        out << kase + 1;
+        out.close();
         std::ifstream cpp_ifs(input);
         char *cpp = new char [1 << 20];
         cpp_ifs.read(cpp, 1 << 20);
-        std::ofstream cpp_ofs("/root/compiler/testcases/233.c");
+        std::ofstream cpp_ofs("/root/compiler/testcases/" + std::to_string(kase) + ".c");
         cpp_ofs << cpp; 
         cpp_ofs.close();
         delete [] cpp;
