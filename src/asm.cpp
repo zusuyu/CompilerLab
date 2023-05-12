@@ -76,7 +76,7 @@ void move_to_reg(koopa_raw_value_t value, std::string dest_reg) {
     }
     else {
         printf("move_to_reg tag error ! (%d)\n", value->kind.tag);
-        exit(1);
+        while(1);
     }
 }
 
@@ -88,7 +88,7 @@ int calc_size(koopa_raw_type_t ty) {
         return ty->data.array.len * calc_size(ty->data.array.base);
     } else {
         printf("calc_size tag error ! (%d)\n", ty->tag);
-        exit(1);
+        while(1);
     }
 }
 
@@ -104,7 +104,7 @@ void solve_global_alloc(koopa_raw_value_t value) {
         }
     } else {
         printf("solve_global_alloc tag error ! (%d)\n", value->kind.tag);
-        exit(1);
+        while(1);
     }
 }
 
@@ -205,7 +205,7 @@ void solve_alloc(koopa_raw_value_t value) {
             return;
         default:
             printf("solve_alloc tag error ! (%d)\n", base->tag);
-            exit(1);
+            while(1);
     }
 }
 
