@@ -274,15 +274,13 @@ void solve_jump(koopa_raw_value_t value) {
 }
 
 /* implement function calls, move all args to a0~7 or the stack, and then store the return value on the stack
- * assume that no function has at least 520 args (otherwise additional_frame_size >= 2048 which can not be represented by 12 bits)
  */
 void solve_call(koopa_raw_value_t value) {
     koopa_raw_call_t call = value->kind.data.call;
     int additional_frame_size = 0;
     if (call.args.len > 8)
         additional_frame_size = ((((int)call.args.len - 8) * 4 - 1) / CHUNKSIZE + 1) * CHUNKSIZE;
-    if (additional_frame_size)
-        riscv_ofs << "    add sp, sp, -" << additional_frame_size << "\n";
+    move_stack_pointer(-additional_frame_size);
     for (int i = 0; i < call.args.len; ++i) {
         koopa_raw_value_t arg = (koopa_raw_value_t)call.args.buffer[i];
         if (i < 8) {
@@ -290,12 +288,13 @@ void solve_call(koopa_raw_value_t value) {
         }
         else {
             move_to_reg(arg, "t0");
-            riscv_ofs << "    sw t0, " << (i - 8) * 4 << "(sp)\n";
+            riscv_ofs << "    li t1, " << (i - 8) * 4 << "\n";
+            riscv_ofs << "    add t1, t1, sp\n";
+            riscv_ofs << "    sw t0, (t1)\n";
         }
     }
     riscv_ofs << "    call " << call.callee->name + 1 << "\n";
-    if (additional_frame_size)
-        riscv_ofs << "    add sp, sp, " << additional_frame_size << "\n";
+    move_stack_pointer(additional_frame_size);
     alloc_on_stack(value);
     riscv_ofs << "    li t0, " << Map[value] << "\n";
     riscv_ofs << "    add t0, t0, fp\n";
@@ -375,7 +374,9 @@ void parse_koopa(const char* str) {
         riscv_ofs << "    .globl " << func->name + 1 << "\n"; // func->name[0] = '@'
         riscv_ofs << func->name + 1 << ":\n";
 
-        /* prologue */
+        /* prologue 
+         * store the first 8 arguments on stack
+         */
         Offset = 8 + std::min((int)func->params.len, 8) * 4;
         curFrameSize = ((Offset - 1) / CHUNKSIZE + 1) * CHUNKSIZE;
         Map.clear();
