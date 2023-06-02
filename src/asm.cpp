@@ -383,7 +383,7 @@ void parse_koopa(const char* str) {
         riscv_ofs << "    sw ra, -4(sp)\n";
         riscv_ofs << "    sw fp, -8(sp)\n";
         for (int j = 0; j < std::min((int)func->params.len, 8); ++j)
-            riscv_ofs << "    sw a" << j << "," << -j * 4 - 12 << "(sp)\n";
+            riscv_ofs << "    sw a" << j << ", " << -j * 4 - 12 << "(sp)\n";
         riscv_ofs << "    mv fp, sp\n";
         move_stack_pointer(-curFrameSize);
 

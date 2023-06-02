@@ -17,7 +17,7 @@ void help() {
 
 int main(int argc, const char *argv[]) {
     
-    if (argc != 5) {
+    if (argc != 5 || strcmp(argv[3], "-o") != 0) {
         help();
         return 0;
     }
